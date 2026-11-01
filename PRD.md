@@ -47,7 +47,12 @@ A localized, real-time multiplayer Web Capsa Banting (Big Two) card game web app
 * **Game Completion:** Game continues until **all 4 players finish their hand** (Rank 1st, 2nd, 3rd, and 4th place calculated).
 
 ### 2.7 Tempelan
-* when playing single card and theres a player that want to play above ten (J,Q,K,Aces) theres tempel button, when they click that they can another card lower card immidiately, for example i press tempel button, and i press Q and 3 and when i click play it drop both of them, after that the other 3 player get a vote button, if all click yes then it get accepted, if one click no then my 3 card goes back to mine.
+* **Availability:** The Tempel button is always available on a player's turn, whether they are beating the current combination or leading a fresh trick.
+* **Play:** The player chooses a **main hand** (any valid combination, played under normal rules) and attaches **exactly one additional hand** from their hand (any valid combination, any rank or type — e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`). Bombs cannot be used as the attached hand.
+* **Vote:** The other players still in the game (finished players cannot vote) get Yes/No buttons. If every voter says yes, the tempelan is accepted; if any voter says no, it is rejected. Timeout counts as a rejection.
+* **Accepted:** Both hands stay played, and the **attached hand becomes the active combination** the next player must beat (e.g. `Q + 4` → next player only needs to beat the `4`; `Q + pair of 4s` → next player must beat the pair of `4s`).
+* **Rejected:** Only the attached hand returns to the player's hand. The **main hand stays on the board** as the active combination, and the next player must beat it.
+* **Turn:** After the vote resolves, the turn passes to the next active player. If the tempelan empties the player's hand, they finish once the vote resolves (the attached cards must be accepted to count as played).
 
 ---
 

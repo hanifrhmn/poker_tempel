@@ -68,6 +68,11 @@ Each phase ships a working commit pushed to `main`. Progress is tracked in `curr
 - Actions: `play`, `pass`, `deselect`-free (engine validates)
 - Turn timer + auto-pass/turn enforcement; action log feed
 - Reconnection handling: 15s grace, then slot converts to bot
+- Effect-ready event design (build now, consume in Phase 7):
+  - One event per action: `play` (seat, cards, combo type, beaten combo, timestamp), `pass`, `trick-reset` (new leader), `finish` (placement), `game-over`
+  - Explicit bomb flag on play events
+  - Timestamp every event so slam effects can measure play-to-play timing
+  - Broadcast serializable public state (convert internal Sets to arrays)
 - Server tests for room lifecycle and illegal action rejection
 
 **Done when:** 4 browser tabs (or Socket.io clients) can play a full game.
@@ -92,11 +97,15 @@ Each phase ships a working commit pushed to `main`. Progress is tracked in `curr
 
 ## Phase 5 — Tempelan
 
-**Goal:** House rule for stacking a low card under a high single.
+**Goal:** House rule for attaching one extra hand on top of a play.
 
-- Tempel button appears when the played single is J/Q/K/A (per PRD)
-- Attach one lower-rank card; both are played together
-- Other 3 players get a Yes/No vote; all yes → accepted, any no → only the lower cards return to hand, the higher cards remain played, and the next player turn.
+- Tempel button always available (beating or leading)
+- Main hand: any valid combo under normal play rules
+- Attach exactly one extra hand of any rank/type (e.g. Q+K, Q+pair, Q+polo); bombs cannot be attached
+- Other players still in the game vote Yes/No (finished players cannot vote)
+- All yes → accepted: attached hand survives and becomes the active combo the next player must beat
+- Any no → rejected: only the attached hand returns to the player's hand; the main hand remains the active play
+- Turn passes to the next active player after resolution
 - Vote timer + timeout behavior (default: reject on timeout)
 - UI states for pending/success/failed tempelan
 
@@ -125,7 +134,12 @@ Each phase ships a working commit pushed to `main`. Progress is tracked in `curr
 
 **Goal:** Game-night ready.
 
-- Animations and sound effects (card play, turn alert, win)
+- Effects (CSS keyframes + Web Audio, no animation library or external CDNs):
+  - Card deal and card-play animations
+  - Explosion effect on bomb plays (four of a kind, straight flush)
+  - Slam effect on fast beats, using event timestamps
+  - Sounds for card play, turn alert, bomb explosion, and win
+  - Effects also fire on bot turns
 - Connection quality indicators and reconnect UX
 - Visual polish: card faces, table felt, mobile/desktop layout pass
 - End-to-end test over Radmin VPN / ZeroTier IPv4 (`http://<IP>:3000`)

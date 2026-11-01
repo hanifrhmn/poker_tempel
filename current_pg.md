@@ -69,6 +69,26 @@ Rule interpretations (documented decisions):
 - If the last player to play has already finished, the lead passes to the next active player.
 - Placements are assigned as hands empty; the game runs until all four players finish (last player plays out their remaining cards).
 
+## Rule revisions
+
+### Tempelan v2 (2026-11-02)
+
+PRD §2.7 and Timeline.md Phase 5 updated to the clarified rules (implementation pending in Phase 5):
+
+- Tempel button is always available — every turn, whether beating or leading a fresh trick
+- Main hand: any valid combo under normal play rules
+- Attach exactly one extra valid hand of any rank/type (e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`); bombs cannot be attached
+- Voters: the other players still in the game — players who already finished cannot vote
+- All yes → accepted: attached hand survives and becomes the active combo the next player must beat
+- Any no → rejected: only the attached hand returns to the player's hand; the main hand stays as the active play
+- Turn passes to the next active player after resolution; timeout counts as rejection
+- Engine impact for Phase 5: needs a pending-vote state, both hands removed at play time, and attached-hand rollback on rejection (accepted play replaces the active combo with the attached combination)
+
+## Planned enhancements (approved, not yet built)
+
+- **Effect-ready event design (Phase 3):** one socket event per action (`play`, `pass`, `trick-reset`, `finish`, `game-over`) with seat, cards, combo type, beaten combo, timestamps, and an explicit bomb flag; serialize public state (Sets → arrays)
+- **Effects stack (Phase 7):** CSS keyframes + Web Audio API only (no animation library, no external CDNs); sounds for card play, turn alert, bomb, and win; explosion effect on bomb plays; slam effect on fast beats using event timing; effects also fire on bot turns
+
 ## How this file is maintained
 
 After each phase completes:
