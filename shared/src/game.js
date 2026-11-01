@@ -1,5 +1,11 @@
 import { cardKey, createDeck, deal, parseCard, shuffle, sortHand } from './cards.js';
-import { canPlayCombination, detectCombination, isBomb } from './combinations.js';
+import {
+  canPlayCombination,
+  detectCombination,
+  isBomb,
+  isLegalFinalPlay,
+  isLegalFinalPlaySet,
+} from './combinations.js';
 
 export const PLAYER_COUNT = 4;
 
@@ -145,6 +151,7 @@ export function createGame({ players, hands, startingPlayerIndex = 0, rng = Math
     activePlay: null,
     passedThisTrick: new Set(),
     pendingTempelan: null,
+    bombPlayed: false,
     placements: [],
     status: 'playing',
     log: [],
@@ -186,7 +193,12 @@ export function playCards(state, playerIndex, keys) {
     return fail('Does not beat the current combination');
   }
 
+  if (player.hand.length === cards.length && !isLegalFinalPlay(combination)) {
+    return fail('Cannot finish with a 2 unless it is part of a sequence');
+  }
+
   player.hand = player.hand.filter((card) => !keys.includes(cardKey(card)));
+  if (isBomb(combination)) state.bombPlayed = true;
 
   const settled = settlePlay(state, playerIndex, combination, {
     type: 'play',
@@ -270,6 +282,18 @@ export function startTempelan(state, playerIndex, mainKeys, attachedKeys) {
     if (!active) return fail('Bombs cannot be led');
     return fail('Main hand does not beat the current combination');
   }
+
+  if (player.hand.length === mainCards.length + attachedCards.length) {
+    const twos = [...mainCards, ...attachedCards].filter((card) => card.rank === '2');
+    if (
+      twos.length > 0 &&
+      !isLegalFinalPlaySet([mainCombination, attachedCombination])
+    ) {
+      return fail('Cannot finish with a 2 unless it is part of a sequence');
+    }
+  }
+
+  if (isBomb(mainCombination)) state.bombPlayed = true;
 
   player.hand = player.hand.filter((card) => !allKeys.includes(cardKey(card)));
 

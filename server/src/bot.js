@@ -2,6 +2,7 @@ import {
   cardKey,
   enumeratePlayableCombinations,
   isBomb,
+  isLegalFinalPlay,
 } from '@poker-tempel/shared';
 
 function lowestCombination(candidates) {
@@ -28,7 +29,10 @@ export function chooseBotMove(game, seat, { random = Math.random } = {}) {
   if (hand.length === 0) return null;
 
   const active = game.activePlay?.combination ?? null;
-  const playable = enumeratePlayableCombinations(hand, active);
+  const playable = enumeratePlayableCombinations(hand, active).filter(
+    (combination) =>
+      hand.length !== combination.cards.length || isLegalFinalPlay(combination),
+  );
 
   if (playable.length === 0) {
     return active ? { type: 'pass' } : null;

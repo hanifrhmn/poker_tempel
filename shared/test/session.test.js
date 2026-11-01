@@ -10,10 +10,12 @@ import {
   detectCombination,
   endSession,
   getStandings,
+  isLegalFinalPlay,
   parseCard,
   pass,
   play,
   playTempelan,
+  resetRoundAfterSelfBomb,
   sortHand,
   startNextRound,
   startSession,
@@ -42,18 +44,20 @@ function playRoundWithSingles(session) {
     const active = game.activePlay?.combination ?? null;
     const sorted = sortHand(game.players[index].hand);
 
-    let played = false;
-    for (const card of sorted) {
+    const playable = sorted.filter((card) => {
       const combination = detectCombination([card]);
-      if (!canPlayCombination(combination, active)) continue;
+      if (!canPlayCombination(combination, active)) return false;
+      if (sorted.length === 1 && !isLegalFinalPlay(combination)) return false;
+      return true;
+    });
 
-      const result = play(session, index, [cardKey(card)]);
+    if (playable.length > 0) {
+      const two = playable.find((card) => card.rank === '2');
+      const choice = sorted.length > 1 && two ? two : playable[0];
+
+      const result = play(session, index, [cardKey(choice)]);
       assert.equal(result.ok, true);
-      played = true;
-      break;
-    }
-
-    if (!played) {
+    } else {
       const result = pass(session, index);
       assert.equal(result.ok, true);
     }
@@ -129,6 +133,7 @@ test('completing round 1 awards scores and records placements', () => {
   assert.equal(session.status, SESSION_STATUS.ROUND_END);
   assert.equal(session.currentGame.status, 'finished');
   assert.equal(session.lastRoundResult.round, 1);
+  assert.equal(session.lastRoundResult.bombPlayed, false);
   assert.equal(session.lastRoundResult.placements.length, 4);
   assert.deepEqual(
     [...session.lastRoundResult.placements].sort((a, b) => a - b),
@@ -184,6 +189,61 @@ test('round 2 deals a full deck and the previous winner leads', () => {
     session.players.reduce((total, player) => total + player.score, 0),
     (3 + 2 + 1 + 0) * 2,
   );
+});
+
+test('a bomb forces the 3-discard opening next round', () => {
+  const session = createSession({ players });
+  session.status = SESSION_STATUS.ROUND_END;
+  session.round = 1;
+  session.lastRoundResult = {
+    round: 1,
+    placements: [0, 1, 2, 3],
+    points: { 0: 3, 1: 2, 2: 1, 3: 0 },
+    bombPlayed: true,
+  };
+
+  const result = startNextRound(session, { rng: seededRng(5) });
+
+  assert.equal(result.ok, true);
+  assert.equal(session.round, 2);
+  assert.ok(result.opening);
+  assert.equal(result.opening.reason, 'bomb');
+
+  const cards = session.currentGame.players.flatMap((player) => player.hand);
+  assert.equal(cards.length, 48);
+  assert.equal(cards.some((card) => card.rank === '3'), false);
+  assert.equal(session.currentGame.turn, result.opening.leader);
+});
+
+test('a self bomb resets the round with the 3-discard opening', () => {
+  const session = createSession({ players });
+  session.status = SESSION_STATUS.PLAYING;
+  session.round = 1;
+  session.currentGame = createGame({
+    players,
+    hands: [['2S'], ['5S'], ['6S'], ['7S']].map((keys) => keys.map(parseCard)),
+    startingPlayerIndex: 0,
+  });
+
+  const result = resetRoundAfterSelfBomb(session, {
+    playerIndex: 0,
+    cards: ['2S'],
+    rng: seededRng(9),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.selfBomb.type, 'self-bomb');
+  assert.equal(session.status, SESSION_STATUS.PLAYING);
+  assert.equal(session.round, 2);
+  assert.ok(result.opening);
+  assert.equal(result.opening.reason, 'self-bomb');
+  assert.equal(result.game.log[0].type, 'self-bomb');
+  assert.deepEqual(result.game.log[0].cards, ['2S']);
+  assert.equal(session.lastRoundResult, null);
+
+  const cards = result.game.players.flatMap((player) => player.hand);
+  assert.equal(cards.length, 48);
+  assert.equal(cards.some((card) => card.rank === '3'), false);
 });
 
 test('maxRounds ends the session automatically', () => {

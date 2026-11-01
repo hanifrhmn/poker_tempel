@@ -4,6 +4,7 @@ import {
   canPlayCombination,
   cardKey,
   detectCombination,
+  isLegalFinalPlay,
   sortHand,
 } from '@poker-tempel/shared';
 import { io as createClient } from 'socket.io-client';
@@ -240,12 +241,18 @@ test('four socket clients can play a full round and advance to round 2', async (
     const active = actorState.activePlay?.combination ?? null;
     const hand = sortHand(actorState.you.hand);
 
-    let action = { type: 'pass' };
-    for (const card of hand) {
+    const playable = hand.filter((card) => {
       const combination = detectCombination([card]);
-      if (!canPlayCombination(combination, active)) continue;
-      action = { type: 'play', cards: [cardKey(card)] };
-      break;
+      if (!canPlayCombination(combination, active)) return false;
+      if (hand.length === 1 && !isLegalFinalPlay(combination)) return false;
+      return true;
+    });
+
+    let action = { type: 'pass' };
+    if (playable.length > 0) {
+      const two = playable.find((card) => card.rank === '2');
+      const choice = hand.length > 1 && two ? two : playable[0];
+      action = { type: 'play', cards: [cardKey(choice)] };
     }
 
     const version = publicState.version;

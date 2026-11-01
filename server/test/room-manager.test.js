@@ -4,7 +4,10 @@ import {
   SESSION_STATUS,
   canPlayCombination,
   cardKey,
+  createGame,
   detectCombination,
+  isLegalFinalPlay,
+  parseCard,
   sortHand,
 } from '@poker-tempel/shared';
 import { chooseBotMove } from '../src/bot.js';
@@ -51,7 +54,7 @@ function playFullRound(manager, code, players) {
   const room = manager.getRoom(code);
   let guard = 0;
 
-  while (room.session.status === SESSION_STATUS.PLAYING && guard < 3000) {
+  while (room.session.status === SESSION_STATUS.PLAYING && guard < 5000) {
     guard += 1;
     const game = room.session.currentGame;
     const seat = game.turn;
@@ -59,28 +62,32 @@ function playFullRound(manager, code, players) {
     const active = game.activePlay?.combination ?? null;
     const hand = sortHand(game.players[seat].hand);
 
-    let played = false;
-    for (const card of hand) {
+    const playable = hand.filter((card) => {
       const combination = detectCombination([card]);
-      if (!canPlayCombination(combination, active)) continue;
+      if (!canPlayCombination(combination, active)) return false;
+      if (hand.length === 1 && !isLegalFinalPlay(combination)) return false;
+      return true;
+    });
+
+    if (playable.length > 0) {
+      const two = playable.find((card) => card.rank === '2');
+      const choice = hand.length > 1 && two ? two : playable[0];
 
       const result = manager.play({
         code,
         playerId: player.playerId,
-        cards: [cardKey(card)],
+        cards: [cardKey(choice)],
       });
       assert.equal(result.ok, true);
-      played = true;
-      break;
-    }
-
-    if (!played) {
+    } else if (active) {
       const result = manager.pass({ code, playerId: player.playerId });
       assert.equal(result.ok, true);
+    } else {
+      break;
     }
   }
 
-  assert.equal(guard < 3000, true);
+  assert.equal(guard < 5000, true);
 }
 
 test('creates rooms, joins players, and enforces capacity', (t) => {
@@ -240,6 +247,38 @@ test('round 1 reveals the opening 3s before the first turn', async (t) => {
     }).ok,
     true,
   );
+});
+
+test('a lead with only a 2 triggers a self bomb and resets the round', (t) => {
+  const manager = makeManager();
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  assert.equal(manager.startGame({ code, playerId: players[0].playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const oldRound = room.session.round;
+  room.session.currentGame = createGame({
+    players: room.session.players,
+    hands: [['2S'], ['5S'], ['6S'], ['7S']].map((keys) => keys.map(parseCard)),
+    startingPlayerIndex: 0,
+  });
+  room.session.status = SESSION_STATUS.PLAYING;
+
+  const events = [];
+  manager.onEvent((_room, event) => events.push(event));
+
+  const reconnect = manager.joinRoom({ code, playerId: players[0].playerId });
+  assert.equal(reconnect.ok, true);
+
+  assert.equal(room.session.round, oldRound + 1);
+  assert.ok(events.some((event) => event.type === 'self-bomb'));
+  assert.ok(room.session.currentGame.log.some((entry) => entry.type === 'self-bomb'));
+  assert.equal(room.session.lastRoundResult, null);
+
+  const cards = room.session.currentGame.players.flatMap((player) => player.hand);
+  assert.equal(cards.length, 48);
+  assert.equal(cards.some((card) => card.rank === '3'), false);
 });
 
 test('validates plays and passes through the session', (t) => {

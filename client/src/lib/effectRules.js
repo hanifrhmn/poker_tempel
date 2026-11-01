@@ -20,6 +20,8 @@ export function classifyGameEvent(event, lastPlayAt = null) {
       return { kind: 'tempelanAccepted', sound: 'tempelAccept', delta: null };
     case 'tempelan-rejected':
       return { kind: 'tempelanRejected', sound: 'tempelReject', delta: null };
+    case 'self-bomb':
+      return { kind: 'selfBomb', sound: 'bomb', delta: null };
     case 'pass':
       return { kind: 'pass', sound: 'pass', delta: null };
     case 'trick-reset':

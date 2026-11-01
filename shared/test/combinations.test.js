@@ -5,6 +5,7 @@ import {
   cardKey,
   detectCombination,
   enumeratePlayableCombinations,
+  isLegalFinalPlay,
   parseCard,
   beats,
   isBomb,
@@ -233,4 +234,21 @@ test('enumerates only combinations that beat the active play', () => {
   const bombOnly = enumeratePlayableCombinations(cards, combo('2S'));
   assert.ok(bombOnly.length > 0);
   assert.ok(bombOnly.every((entry) => isBomb(entry)));
+});
+
+test('final plays cannot contain a high 2 unless it is in a sequence', () => {
+  assert.equal(isLegalFinalPlay(combo('3S')), true);
+  assert.equal(isLegalFinalPlay(null), false);
+
+  assert.equal(isLegalFinalPlay(combo('2S')), false);
+  assert.equal(isLegalFinalPlay(combo('2S', '2H')), false);
+  assert.equal(isLegalFinalPlay(combo('2S', '2H', '2D')), false);
+  assert.equal(isLegalFinalPlay(combo('2S', '2H', '2D', '2C')), false);
+  assert.equal(isLegalFinalPlay(combo('2S', '2H', '2D', '3S', '3H')), false);
+  assert.equal(isLegalFinalPlay(combo('3S', '3H', '3D', '2S', '2H')), false);
+
+  assert.equal(isLegalFinalPlay(combo('2S', '3S', '4S')), true);
+  assert.equal(isLegalFinalPlay(combo('2S', '3S', '4S', '5S', '6S')), true);
+  assert.equal(isLegalFinalPlay(combo('2S', '3S', '4S', '5H', '5D')), true);
+  assert.equal(isLegalFinalPlay(combo('2S', '3S', '4S', '2H', '2D')), false);
 });

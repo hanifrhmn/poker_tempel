@@ -62,6 +62,16 @@ test('tempelan-resolved plays keep the result banner instead of a slam', () => {
   assert.equal(effect.sound, 'card');
 });
 
+test('self bombs trigger the explosion effect', () => {
+  const effect = classifyGameEvent(
+    { type: 'self-bomb', playerName: 'A', cards: ['2S'], at: 1000 },
+    null,
+  );
+
+  assert.equal(effect.kind, 'selfBomb');
+  assert.equal(effect.sound, 'bomb');
+});
+
 test('last play timestamp updates only on play events', () => {
   assert.equal(nextLastPlayAt({ type: 'play', at: 123 }, null), 123);
   assert.equal(nextLastPlayAt({ type: 'pass', at: 456 }, 123), 123);

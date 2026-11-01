@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  SESSION_STATUS,
+  cardKey,
   createGame,
+  createSession,
   parseCard,
+  pass as sessionPass,
   passTurn,
+  play as sessionPlay,
   playCards,
+  resetRoundAfterSelfBomb,
+  startSession,
   startTempelan,
   submitTempelanVote,
 } from '@poker-tempel/shared';
@@ -12,6 +19,17 @@ import { chooseBotMove, chooseBotVote } from '../src/bot.js';
 
 const players = ['A', 'B', 'C', 'D'].map((name) => ({ id: name, name }));
 const cards = (keys) => keys.map(parseCard);
+
+function seededRng(seed) {
+  let value = seed;
+  return () => {
+    value |= 0;
+    value = (value + 0x6d2b79f5) | 0;
+    let t = Math.imul(value ^ (value >>> 15), 1 | value);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function game(hands) {
   return createGame({ players, hands: hands.map(cards) });
@@ -153,7 +171,7 @@ test('bot responds with the lowest matching combination', () => {
   });
 
   const flushState = game([
-    ['2S'],
+    ['2S', 'QC'],
     ['3H', '4H', '5H', '6H', '7H'],
     ['4S', '5S', '6S', '7S', '8S'],
     ['9C'],
@@ -168,7 +186,7 @@ test('bot responds with the lowest matching combination', () => {
 
 test('bot bombs a single 2 only on a coin flip', () => {
   const state = game([
-    ['2S'],
+    ['2S', '3C'],
     ['5S', '5H', '5D', '5C', '7C'],
     ['8S'],
     ['9S'],
@@ -182,7 +200,7 @@ test('bot bombs a single 2 only on a coin flip', () => {
   assert.deepEqual(chooseBotMove(state, 1, { random: () => 0.9 }), { type: 'pass' });
 
   const noBomb = game([
-    ['2S'],
+    ['2S', '3C'],
     ['5S', '4H'],
     ['8S'],
     ['9S'],
@@ -193,7 +211,7 @@ test('bot bombs a single 2 only on a coin flip', () => {
 
 test('bot chains a higher bomb when the table is a bomb', () => {
   const state = game([
-    ['2S'],
+    ['2S', '3C'],
     ['5S', '5H', '5D', '5C', '6C'],
     ['7S', '7H', '7D', '7C', '9C'],
     ['8S'],
@@ -208,6 +226,27 @@ test('bot chains a higher bomb when the table is a bomb', () => {
   });
 });
 
+test('bot avoids finishing with a high 2', () => {
+  const onlyTwo = game([
+    ['2S'],
+    ['3S'],
+    ['4S'],
+    ['5S'],
+  ]);
+  assert.equal(chooseBotMove(onlyTwo, 0), null);
+
+  const pairOfTwos = game([
+    ['2S', '2H'],
+    ['3S'],
+    ['4S'],
+    ['5S'],
+  ]);
+  const move = chooseBotMove(pairOfTwos, 0);
+  assert.equal(move.type, 'play');
+  assert.equal(move.cards.length, 1);
+  assert.equal(move.cards[0][0], '2');
+});
+
 test('bot never leads with a bomb', () => {
   const state = game([
     ['3S', '5S', '5H', '5D', '5C'],
@@ -219,28 +258,41 @@ test('bot never leads with a bomb', () => {
   assert.deepEqual(chooseBotMove(state, 0), { type: 'play', cards: ['3S'] });
 });
 
-test('four bots can finish a full game', () => {
-  const state = createGame({ players });
+test('four bots can finish a full round through the session', () => {
+  const rng = seededRng(42);
+  const session = createSession({ players });
+  assert.equal(startSession(session, { rng }).ok, true);
+
   let guard = 0;
 
-  while (state.status === 'playing' && guard < 1000) {
+  while (session.status === SESSION_STATUS.PLAYING && guard < 5000) {
     guard += 1;
-    const seat = state.turn;
-    const move = chooseBotMove(state, seat, { random: () => 0.9 });
-    assert.ok(move);
+    const game = session.currentGame;
+    const seat = game.turn;
+    const move = chooseBotMove(game, seat, { random: () => 0.9 });
+
+    if (!move) {
+      const result = resetRoundAfterSelfBomb(session, {
+        playerIndex: seat,
+        cards: game.players[seat].hand.map(cardKey),
+        rng,
+      });
+      assert.equal(result.ok, true);
+      continue;
+    }
 
     const result =
       move.type === 'play'
-        ? playCards(state, seat, move.cards)
-        : passTurn(state, seat);
+        ? sessionPlay(session, seat, move.cards)
+        : sessionPass(session, seat);
     assert.equal(result.ok, true);
   }
 
-  assert.equal(guard < 1000, true);
-  assert.equal(state.status, 'finished');
-  assert.equal(state.placements.length, 4);
+  assert.equal(guard < 5000, true);
+  assert.equal(session.status, SESSION_STATUS.ROUND_END);
+  assert.equal(session.lastRoundResult.placements.length, 4);
   assert.deepEqual(
-    [...state.placements].sort((a, b) => a - b),
+    [...session.lastRoundResult.placements].sort((a, b) => a - b),
     [0, 1, 2, 3],
   );
 });

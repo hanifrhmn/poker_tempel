@@ -24,13 +24,14 @@ export const COMBINATION_LABELS = Object.freeze({
 
 const BOMB_TYPES = new Set([COMBINATION_TYPES.FOUR_OF_A_KIND, COMBINATION_TYPES.STRAIGHT_FLUSH]);
 
-function makeCombination(type, cards, primaryRank, primaryValue, suit = null) {
+function makeCombination(type, cards, primaryRank, primaryValue, suit = null, sequenceCards = null) {
   return {
     type,
     cards: sortHand(cards),
     primaryRank,
     primaryValue,
     suit,
+    sequenceCards: sequenceCards ? sortHand(sequenceCards) : null,
   };
 }
 
@@ -77,6 +78,7 @@ function findPoloSeri(cards) {
           sequence.topRank,
           sequence.topValue,
           sequence.suit,
+          straightCards,
         );
         if (!best || combination.primaryValue > best.primaryValue) {
           best = combination;
@@ -135,6 +137,7 @@ export function detectCombination(cards) {
         sequence.topRank,
         sequence.topValue,
         sequence.suit,
+        sorted,
       );
     }
 
@@ -159,6 +162,7 @@ export function detectCombination(cards) {
       straightFlush.topRank,
       straightFlush.topValue,
       straightFlush.suit,
+      sorted,
     );
   }
 
@@ -230,4 +234,36 @@ export function enumeratePlayableCombinations(hand, active = null) {
 
   visit(0);
   return results;
+}
+
+export function isLegalFinalPlaySet(combinations) {
+  const list = (combinations ?? []).filter(Boolean);
+  const twos = list.flatMap((combination) => combination.cards).filter((card) => card.rank === '2');
+  if (twos.length === 0) return true;
+
+  const sequenceKeys = new Set();
+
+  for (const combination of list) {
+    if (
+      combination.type === COMBINATION_TYPES.SERI ||
+      combination.type === COMBINATION_TYPES.STRAIGHT_FLUSH
+    ) {
+      combination.cards
+        .filter((card) => card.rank === '2')
+        .forEach((card) => sequenceKeys.add(cardKey(card)));
+    } else if (
+      combination.type === COMBINATION_TYPES.POLO_SERI &&
+      combination.sequenceCards
+    ) {
+      combination.sequenceCards
+        .filter((card) => card.rank === '2')
+        .forEach((card) => sequenceKeys.add(cardKey(card)));
+    }
+  }
+
+  return twos.every((card) => sequenceKeys.has(cardKey(card)));
+}
+
+export function isLegalFinalPlay(combination) {
+  return Boolean(combination) && isLegalFinalPlaySet([combination]);
 }

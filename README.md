@@ -43,6 +43,7 @@ In-game:
 - Round 1 starts with a visible reveal of everyone's 3s; the 3♠ holder is highlighted before leading.
 - Click cards to select, then **Play** (or **Pass** / **Deselect**).
 - **Tempel** attaches one extra hand to your play; every active player votes, and the result appears on screen with a sound.
+- House rules: you cannot finish on a 2 unless it is part of a sequence (e.g. `2-3-4`). If you are forced to lead with only a 2, it self-bombs, the round resets, and everyone discards 3s again. If any bomb is played, the next round also starts with the 3-discard opening.
 - Sound can be toggled in the header (or on the home screen). Audio starts after your first click or keypress.
 - If someone disconnects, their seat becomes a bot after 15 seconds; reconnecting from the same browser restores control.
 

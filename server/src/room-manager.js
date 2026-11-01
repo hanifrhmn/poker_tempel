@@ -9,6 +9,7 @@ import {
   pass as passSession,
   play as playSession,
   playTempelan as playTempelanSession,
+  resetRoundAfterSelfBomb,
   resolveTempelanVote as resolveTempelanVoteSession,
   sortHand,
   startNextRound,
@@ -78,6 +79,11 @@ export function createRoomManager(options = {}) {
 
   function emitGameEvent(room, event) {
     for (const listener of eventListeners) listener(room, event);
+  }
+
+  function emitEventsForGame(room, game, events) {
+    if (room.session?.currentGame !== game) return;
+    for (const event of events) emitGameEvent(room, event);
   }
 
   function getRoomByCode(code) {
@@ -195,7 +201,7 @@ export function createRoomManager(options = {}) {
     const events = game.log.slice(logStart);
     syncTimers(room);
     emitUpdate(room);
-    for (const event of events) emitGameEvent(room, event);
+    emitEventsForGame(room, game, events);
   }
 
   function onTempelTimeout(code) {
@@ -210,7 +216,7 @@ export function createRoomManager(options = {}) {
     const events = game.log.slice(logStart);
     syncTimers(room);
     emitUpdate(room);
-    for (const event of events) emitGameEvent(room, event);
+    emitEventsForGame(room, game, events);
   }
 
   function clearOpeningTimer(room) {
@@ -227,6 +233,7 @@ export function createRoomManager(options = {}) {
     room.opening = {
       leader: opening.leader,
       discards: opening.discards,
+      reason: opening.reason ?? 'first-round',
       startedAt,
       endsAt: startedAt + config.openingDurationMs,
     };
@@ -249,16 +256,47 @@ export function createRoomManager(options = {}) {
 
     if (game) {
       const leaderName = game.players[opening.leader]?.name ?? 'The 3♠ holder';
+      const prefix =
+        opening.reason === 'bomb'
+          ? 'Bomb reset'
+          : opening.reason === 'self-bomb'
+            ? 'Self bomb reset'
+            : 'All 3s discarded';
       const event = {
         type: 'opening-complete',
         at: Date.now(),
         playerIndex: opening.leader,
-        message: `All 3s discarded — ${leaderName} leads first`,
+        message: `${prefix} — ${leaderName} leads first`,
       };
       game.log.push(event);
       events.push(event);
     }
 
+    syncTimers(room);
+    emitUpdate(room);
+    if (game) emitEventsForGame(room, game, events);
+  }
+
+  function isStuckWithPoker(game) {
+    if (!game || game.status !== 'playing' || game.pendingTempelan) return false;
+    if (game.activePlay) return false;
+    const hand = game.players[game.turn]?.hand ?? [];
+    return hand.length === 1 && hand[0].rank === '2';
+  }
+
+  function triggerSelfBomb(room) {
+    const session = room.session;
+    const game = session?.currentGame;
+    if (!game) return;
+
+    const seat = game.turn;
+    const cards = game.players[seat].hand.map(cardKey);
+    const result = resetRoundAfterSelfBomb(session, { playerIndex: seat, cards });
+    if (!result.ok) return;
+
+    if (result.opening) beginOpening(room, result.opening);
+
+    const events = [...result.game.log];
     syncTimers(room);
     emitUpdate(room);
     for (const event of events) emitGameEvent(room, event);
@@ -284,6 +322,11 @@ export function createRoomManager(options = {}) {
       room.turnDeadline = null;
       armTempelVote(room);
       scheduleBotVotes(room);
+      return;
+    }
+
+    if (isStuckWithPoker(game)) {
+      triggerSelfBomb(room);
       return;
     }
 
@@ -320,7 +363,7 @@ export function createRoomManager(options = {}) {
     const events = game.log.slice(logStart);
     syncTimers(room);
     emitUpdate(room);
-    for (const event of events) emitGameEvent(room, event);
+    emitEventsForGame(room, game, events);
     return result;
   }
 
@@ -331,6 +374,10 @@ export function createRoomManager(options = {}) {
 
     const game = room.session.currentGame;
     const seat = game.turn;
+    if (isStuckWithPoker(game)) {
+      triggerSelfBomb(room);
+      return;
+    }
     if (game.activePlay) {
       performAction(room, seat, { type: 'pass' });
       return;
@@ -350,7 +397,10 @@ export function createRoomManager(options = {}) {
     if (game.turn !== seat || !room.slots[seat]?.isBot) return;
 
     const move = chooseBotMove(game, seat);
-    if (!move) return;
+    if (!move) {
+      if (isStuckWithPoker(game)) triggerSelfBomb(room);
+      return;
+    }
 
     const result = performAction(room, seat, move);
     if (result.ok) return;
@@ -421,6 +471,7 @@ export function createRoomManager(options = {}) {
       turnDeadline: room.turnDeadline,
       activePlay: game.activePlay,
       passedSeats: [...game.passedThisTrick],
+      bombPlayed: game.bombPlayed,
       opening: room.opening,
       pendingTempelan: pending
         ? {

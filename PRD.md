@@ -54,6 +54,12 @@ A localized, real-time multiplayer Web Capsa Banting (Big Two) card game web app
 * **Rejected:** Only the attached hand returns to the player's hand. The **main hand stays on the board** as the active combination, and the next player must beat it.
 * **Turn:** After the vote resolves, the turn passes to the next active player. If the tempelan empties the player's hand, they finish once the vote resolves (the attached cards must be accepted to count as played).
 
+### 2.8 Finishing Restrictions & Reset Rules
+* **No finishing on a 2 ("poker"):** A player cannot empty their hand with a final play that uses 2s as high cards — single 2, pair of 2s, triple 2s, four-of-a-kind 2s, a Polo with triple 2s (or a pair of 2s), or any other final combination containing a non-sequence 2. This is treated as bombing yourself.
+* **Sequence exception:** A 2 used as the low card of a valid sequence is allowed in the final play: Seri `2-3-4`, Straight Flush `2-3-4-5-6`, and Polo Seri whose 3-card straight component is `2-3-4`. If the free pair of a Polo Seri contains 2s, those 2s are not a sequence use and the final play is not allowed.
+* **Self bomb:** If a player is left with only a single 2 and must lead (no legal finishing play), it is a **self bomb**: the 2 is revealed, an explosion effect plays, the current round is aborted without scoring, and a new round starts with the 3-discard opening (everyone discards their 3s; the 3♠ holder leads). If the player can pass because an active play exists, they may pass; the self bomb triggers when they are forced to lead.
+* **Bomb reset:** If any bomb (Four of a Kind or Straight Flush, including a bomb used as the main hand in a Tempelan) was played during a round, the next round also starts with the 3-discard opening (everyone discards their 3s; the 3♠ holder leads) instead of the previous winner leading.
+
 ---
 
 ## 3. System Architecture & Technical Stack

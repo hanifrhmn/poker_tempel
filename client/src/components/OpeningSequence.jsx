@@ -34,6 +34,12 @@ export default function OpeningSequence({ opening, players, mySeat }) {
   }, [revealed, done]);
 
   const leaderName = players[opening.leader]?.name ?? 'The 3♠ holder';
+  const subtitle =
+    opening.reason === 'bomb'
+      ? 'A bomb was played — everyone discards their 3s again; the 3♠ holder leads.'
+      : opening.reason === 'self-bomb'
+        ? 'Self bomb! Everyone discards their 3s again; the 3♠ holder leads.'
+        : 'Everyone reveals their 3s — the 3♠ holder leads first.';
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-emerald-950/90 p-4 backdrop-blur-sm">
@@ -43,7 +49,7 @@ export default function OpeningSequence({ opening, players, mySeat }) {
         </p>
         <h2 className="mt-1 text-center text-2xl font-black text-amber-200">Discarding 3s</h2>
         <p className="mt-1 text-center text-xs text-emerald-200/60">
-          Everyone reveals their 3s — the 3♠ holder leads first.
+          {subtitle}
         </p>
 
         <div className="mt-4 space-y-2">

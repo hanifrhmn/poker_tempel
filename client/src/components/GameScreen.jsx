@@ -5,6 +5,8 @@ import {
   cardKey,
   detectCombination,
   isBomb,
+  isLegalFinalPlay,
+  isLegalFinalPlaySet,
 } from '@poker-tempel/shared';
 import ActionLog from './ActionLog.jsx';
 import Button from './Button.jsx';
@@ -57,8 +59,11 @@ export default function GameScreen({ room, send, onLeave }) {
     [hand, selected],
   );
   const combination = selectedCards.length > 0 ? detectCombination(selectedCards) : null;
+  const wouldEmptyHand = selectedCards.length > 0 && selectedCards.length === hand.length;
+  const legalFinal =
+    !wouldEmptyHand || (combination ? isLegalFinalPlay(combination) : true);
   const beatsTable = Boolean(combination && canPlayCombination(combination, active));
-  const canPlay = Boolean(isMyTurn && beatsTable);
+  const canPlay = Boolean(isMyTurn && beatsTable && legalFinal);
 
   const tempelMainCards = useMemo(
     () => hand.filter((card) => tempelMain.includes(cardKey(card))),
@@ -68,8 +73,20 @@ export default function GameScreen({ room, send, onLeave }) {
     tempelMainCards.length > 0 ? detectCombination(tempelMainCards) : null;
   const attachedCombination =
     tempelMode && selectedCards.length > 0 ? detectCombination(selectedCards) : null;
+  const tempelWouldEmpty =
+    tempelMain.length > 0 && tempelMain.length + selected.size === hand.length;
+  const tempelFinalLegal =
+    !tempelWouldEmpty ||
+    Boolean(
+      tempelMainCombination &&
+        attachedCombination &&
+        isLegalFinalPlaySet([tempelMainCombination, attachedCombination]),
+    );
   const canTempelPlay = Boolean(
-    isMyTurn && attachedCombination && !isBomb(attachedCombination),
+    isMyTurn &&
+      attachedCombination &&
+      !isBomb(attachedCombination) &&
+      tempelFinalLegal,
   );
   const canStartTempel = Boolean(canPlay && hand.length > selected.size);
 
@@ -125,11 +142,13 @@ export default function GameScreen({ room, send, onLeave }) {
 
   const normalHint = !combination
     ? 'Not a valid combination'
-    : !isMyTurn
-      ? 'Waiting for your turn'
-      : beatsTable
-        ? 'Ready to play'
-        : 'Cannot beat the table';
+    : wouldEmptyHand && !legalFinal
+      ? 'Cannot finish with a 2'
+      : !isMyTurn
+        ? 'Waiting for your turn'
+        : beatsTable
+          ? 'Ready to play'
+          : 'Cannot beat the table';
 
   const tempelHint = !selected.size
     ? 'Pick one extra hand to tempel'
@@ -137,7 +156,9 @@ export default function GameScreen({ room, send, onLeave }) {
       ? 'Not a valid combination'
       : isBomb(attachedCombination)
         ? 'Bombs cannot be tempeled'
-        : 'Ready to tempel';
+        : !tempelFinalLegal
+          ? 'Cannot finish with a 2'
+          : 'Ready to tempel';
 
   const hintText = tempelMode
     ? attachedCombination
@@ -150,7 +171,7 @@ export default function GameScreen({ room, send, onLeave }) {
   const hintColor = tempelMode
     ? canTempelPlay
       ? 'text-emerald-300'
-      : attachedCombination && isBomb(attachedCombination)
+      : attachedCombination && (isBomb(attachedCombination) || !tempelFinalLegal)
         ? 'text-red-300'
         : 'text-amber-300/80'
     : !combination

@@ -5,6 +5,7 @@ import {
   cardKey,
   createGame,
   detectCombination,
+  isLegalFinalPlay,
   parseCard,
   passTurn,
   playCards,
@@ -16,6 +17,17 @@ import {
 const players = ['A', 'B', 'C', 'D'].map((name) => ({ id: name, name }));
 
 const cards = (keys) => keys.map(parseCard);
+
+function seededRng(seed) {
+  let value = seed;
+  return () => {
+    value |= 0;
+    value = (value + 0x6d2b79f5) | 0;
+    let t = Math.imul(value ^ (value >>> 15), 1 | value);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function game(hands, startingPlayerIndex = 0) {
   return createGame({
@@ -180,6 +192,7 @@ test('allows a bomb on a single 2 and chains higher bombs of the same kind', () 
   assert.equal(bombLog.beaten.type, 'single');
   assert.equal(bombLog.beaten.primaryRank, '2');
   assert.equal(typeof bombLog.at, 'number');
+  assert.equal(state.bombPlayed, true);
 
   assert.equal(
     playCards(state, 2, ['7S']).error,
@@ -217,33 +230,35 @@ test('rejects leading with a bomb', () => {
 });
 
 test('a full game of singles reaches a complete finish order', () => {
-  const state = createGame({ players });
+  const state = createGame({ players, rng: seededRng(123) });
   let guard = 0;
 
-  while (state.status === 'playing' && guard < 1000) {
+  while (state.status === 'playing' && guard < 2000) {
     guard += 1;
     const index = state.turn;
     const active = state.activePlay?.combination ?? null;
     const sorted = sortHand(state.players[index].hand);
 
-    let played = false;
-    for (const card of sorted) {
+    const playable = sorted.filter((card) => {
       const combination = detectCombination([card]);
-      if (!canPlayCombination(combination, active)) continue;
+      if (!canPlayCombination(combination, active)) return false;
+      if (sorted.length === 1 && !isLegalFinalPlay(combination)) return false;
+      return true;
+    });
 
-      const result = playCards(state, index, [cardKey(card)]);
+    if (playable.length > 0) {
+      const two = playable.find((card) => card.rank === '2');
+      const choice = sorted.length > 1 && two ? two : playable[0];
+
+      const result = playCards(state, index, [cardKey(choice)]);
       assert.equal(result.ok, true);
-      played = true;
-      break;
-    }
-
-    if (!played) {
+    } else {
       const result = passTurn(state, index);
       assert.equal(result.ok, true);
     }
   }
 
-  assert.equal(guard < 1000, true);
+  assert.equal(guard < 2000, true);
   assert.equal(state.status, 'finished');
   assert.equal(state.placements.length, 4);
   assert.deepEqual(
@@ -441,28 +456,135 @@ test('finished players cannot vote on a tempelan', () => {
 
 test('a tempelan can use a bomb as the main hand on a single 2', () => {
   const state = game([
-    ['2S'],
+    ['2S', '3C'],
     ['5S', '5H', '5D', '5C', '6D'],
     ['7S'],
     ['8S'],
   ]);
 
-  playCards(state, 0, ['2S']);
+  assert.equal(playCards(state, 0, ['2S']).ok, true);
+  assert.equal(state.activePlay.combination.primaryRank, '2');
 
   const started = startTempelan(state, 1, ['5S', '5H', '5D', '5C'], ['6D']);
 
   assert.equal(started.ok, true);
   assert.equal(state.pendingTempelan.main.combination.type, 'fourOfAKind');
-  assert.deepEqual(state.pendingTempelan.voters, [2, 3]);
+  assert.equal(state.bombPlayed, true);
+  assert.deepEqual(state.pendingTempelan.voters, [0, 2, 3]);
 
+  assert.equal(submitTempelanVote(state, 0, true).resolved, false);
   assert.equal(submitTempelanVote(state, 2, true).resolved, false);
   const resolved = submitTempelanVote(state, 3, true);
 
   assert.equal(resolved.accepted, true);
   assert.equal(state.players[1].finished, true);
-  assert.equal(state.players[1].placement, 2);
+  assert.equal(state.players[1].placement, 1);
   assert.equal(state.activePlay.combination.primaryRank, '6');
   assert.equal(state.turn, 2);
+});
+
+test('cannot finish with a 2 unless it is part of a sequence', () => {
+  const single = game([
+    ['2S'],
+    ['3S'],
+    ['4S'],
+    ['5S'],
+  ]);
+  assert.equal(
+    playCards(single, 0, ['2S']).error,
+    'Cannot finish with a 2 unless it is part of a sequence',
+  );
+
+  const pair = game([
+    ['2S', '2H'],
+    ['3S'],
+    ['4S'],
+    ['5S'],
+  ]);
+  assert.equal(
+    playCards(pair, 0, ['2S', '2H']).error,
+    'Cannot finish with a 2 unless it is part of a sequence',
+  );
+
+  const nonFinal = game([
+    ['2S', '3H'],
+    ['4S'],
+    ['5S'],
+    ['6S'],
+  ]);
+  assert.equal(playCards(nonFinal, 0, ['2S']).ok, true);
+  assert.equal(nonFinal.players[0].finished, false);
+
+  const seri = game([
+    ['2S', '3S', '4S'],
+    ['5S', '5H'],
+    ['6S'],
+    ['7S'],
+  ]);
+  assert.equal(playCards(seri, 0, ['2S', '3S', '4S']).ok, true);
+  assert.equal(seri.players[0].finished, true);
+
+  const poloSeri = game([
+    ['2S', '3S', '4S', '5H', '5D'],
+    ['6S'],
+    ['7S'],
+    ['8S'],
+  ]);
+  assert.equal(playCards(poloSeri, 0, ['2S', '3S', '4S', '5H', '5D']).ok, true);
+  assert.equal(poloSeri.players[0].finished, true);
+
+  const poloPairTwos = game([
+    ['3S', '3H', '3D', '2S', '2H'],
+    ['4S'],
+    ['5S'],
+    ['6S'],
+  ]);
+  assert.equal(
+    playCards(poloPairTwos, 0, ['3S', '3H', '3D', '2S', '2H']).error,
+    'Cannot finish with a 2 unless it is part of a sequence',
+  );
+
+  const straightFlush = game(
+    [
+      ['2S', '3S', '4S', '5S', '6S'],
+      ['8S'],
+      ['9S'],
+      ['2H', '7C'],
+    ],
+    3,
+  );
+  assert.equal(playCards(straightFlush, 3, ['2H']).ok, true);
+  assert.equal(playCards(straightFlush, 0, ['2S', '3S', '4S', '5S', '6S']).ok, true);
+  assert.equal(straightFlush.players[0].finished, true);
+});
+
+test('tempelan cannot finish with a high 2', () => {
+  const finalState = game([
+    ['QS', '2H'],
+    ['5S'],
+    ['6S'],
+    ['8S'],
+  ]);
+  assert.equal(
+    startTempelan(finalState, 0, ['QS'], ['2H']).error,
+    'Cannot finish with a 2 unless it is part of a sequence',
+  );
+
+  const legalSeri = game([
+    ['QS', '2S', '3S', '4S'],
+    ['5S'],
+    ['6S'],
+    ['8S'],
+  ]);
+  assert.equal(startTempelan(legalSeri, 0, ['QS'], ['2S', '3S', '4S']).ok, true);
+
+  const notFinal = game([
+    ['QS', '2H', '7D'],
+    ['5S'],
+    ['6S'],
+    ['8S'],
+  ]);
+  assert.equal(startTempelan(notFinal, 0, ['QS'], ['2H']).ok, true);
 });
 
 test('a tempelan with no other active players auto-accepts', () => {

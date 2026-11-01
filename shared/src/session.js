@@ -51,6 +51,7 @@ export function createSession({ players, scoreTable = DEFAULT_SCORE_TABLE, maxRo
     })),
     currentGame: null,
     lastRoundResult: null,
+    lastSelfBomb: null,
   };
 }
 
@@ -73,6 +74,7 @@ function completeRound(session) {
     round: session.round,
     placements,
     points,
+    bombPlayed: Boolean(session.currentGame.bombPlayed),
   };
 
   session.status =
@@ -88,8 +90,13 @@ export function startSession(session, { rng = Math.random } = {}) {
   return startNextRound(session, { rng });
 }
 
-export function startNextRound(session, { rng = Math.random } = {}) {
-  if (session.status !== SESSION_STATUS.LOBBY && session.status !== SESSION_STATUS.ROUND_END) {
+export function startNextRound(session, { rng = Math.random, forceOpening = false } = {}) {
+  const canStart =
+    session.status === SESSION_STATUS.LOBBY ||
+    session.status === SESSION_STATUS.ROUND_END ||
+    (forceOpening && session.status === SESSION_STATUS.PLAYING);
+
+  if (!canStart) {
     return fail('Cannot start a round right now');
   }
   if (session.maxRounds !== null && session.round >= session.maxRounds) {
@@ -100,10 +107,12 @@ export function startNextRound(session, { rng = Math.random } = {}) {
   session.status = SESSION_STATUS.DEALING;
 
   const hands = deal(shuffle(createDeck(), rng), PLAYER_COUNT, 13);
+  const bombReset = Boolean(session.lastRoundResult?.bombPlayed);
+  const openingNeeded = session.round === 1 || forceOpening || bombReset;
   let startingPlayerIndex;
   let opening = null;
 
-  if (session.round === 1) {
+  if (openingNeeded) {
     startingPlayerIndex = hands.findIndex((hand) =>
       hand.some((card) => card.rank === '3' && card.suit === 'S'),
     );
@@ -117,6 +126,7 @@ export function startNextRound(session, { rng = Math.random } = {}) {
         playerIndex,
         cards: hand.filter((card) => card.rank === '3').map(cardKey),
       })),
+      reason: session.round === 1 ? 'first-round' : forceOpening ? 'self-bomb' : 'bomb',
     };
   } else {
     startingPlayerIndex = session.lastRoundResult.placements[0];
@@ -146,6 +156,35 @@ export function startNextRound(session, { rng = Math.random } = {}) {
   session.status = SESSION_STATUS.PLAYING;
 
   return { ok: true, game, opening };
+}
+
+export function resetRoundAfterSelfBomb(
+  session,
+  { playerIndex, cards = [], rng = Math.random } = {},
+) {
+  if (session.status !== SESSION_STATUS.PLAYING) {
+    return fail('Round is not in progress');
+  }
+
+  const oldGame = session.currentGame;
+  const playerName = oldGame?.players[playerIndex]?.name ?? `Player ${playerIndex + 1}`;
+  const at = Date.now();
+  const started = startNextRound(session, { rng, forceOpening: true });
+  if (!started.ok) return started;
+
+  const event = {
+    type: 'self-bomb',
+    at,
+    playerIndex,
+    playerName,
+    cards: [...cards],
+    message: `${playerName}'s last card was a 2 — self bomb!`,
+  };
+
+  started.game.log.unshift(event);
+  session.lastSelfBomb = event;
+
+  return { ...started, selfBomb: event };
 }
 
 export function play(session, playerIndex, cardKeys) {

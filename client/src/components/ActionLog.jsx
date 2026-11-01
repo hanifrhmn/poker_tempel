@@ -46,6 +46,8 @@ function describe(entry, players) {
       return 'Opening · everyone reveals their 3s';
     case 'opening-complete':
       return entry.message ?? 'All 3s discarded';
+    case 'self-bomb':
+      return entry.message ?? 'Self bomb — round reset';
     default:
       return entry.message ?? entry.type;
   }

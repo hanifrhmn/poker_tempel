@@ -270,6 +270,28 @@ Final PRD audit:
 - Opening/pending timers and the turn timer are coordinated; the opening is validated over a real production server (4×3s revealed, `turnDeadline` null during the reveal, cleared at ~3.6s, `opening-complete` logged).
 - `npm test` → 86/86 passing (47 shared + 32 server + 7 client); build → 309.42 kB JS / 95.00 kB gzip, 45.64 kB CSS / 8.10 kB gzip.
 
+## Rule additions (2026-11-02)
+
+### No finishing on a 2 + self bomb
+
+- A final play may not contain a high 2 (single/pair/triple/four-of-a-kind 2s, Polo with 2s, or any non-sequence 2). Sequence uses of 2 are allowed: Seri `2-3-4`, Straight Flush `2-3-4-5-6`, and Polo Seri whose 3-card straight is `2-3-4`. A Polo Seri whose free pair is 2s is **not** allowed as a final play (documented interpretation).
+- Enforced in the engine for normal plays and for the accepted result of a Tempelan (the combined main + attached cards are checked).
+- If the player is left with only a single 2 and must lead, the room triggers a **self bomb**: the 2 is revealed, the bomb effect + sound play, the round is aborted without scoring, and a new round starts with the forced 3-discard opening (`self-bomb` reason).
+- If the player can pass (an active play exists), passing is allowed; the self bomb triggers when they are forced to lead. Bots filter illegal final 2 combinations and are handled by the same self-bomb path.
+- Client shows the self-bomb overlay with the last 2, validates the finishing rule before allowing Play, and shows the reason in the opening reveal.
+
+### Bomb reset for the next round
+
+- The engine records `bombPlayed` whenever a bomb is actually played, including a bomb used as a Tempelan main hand.
+- `completeRound` stores `bombPlayed` in `lastRoundResult`; `startNextRound` repeats the 3-discard opening (3♠ holder leads) when the previous round had a bomb, with the opening reason `bomb`.
+- The opening overlay displays whether it is the first round, a bomb reset, or a self-bomb reset.
+
+### Verification
+
+- `npm test` → 94/94 passing (52 shared + 34 server + 8 client)
+- Build → 311.59 kB JS / 95.50 kB gzip, 46.30 kB CSS / 8.18 kB gzip
+- New tests cover the final-2 rule (engine + client validation helpers), Tempelan final checks, bomb tracking, bomb-reset opening, self-bomb reset, room-manager self-bomb triggering, and bot filtering.
+
 ## Rule revisions
 
 ### Tempelan v2 (2026-11-02)

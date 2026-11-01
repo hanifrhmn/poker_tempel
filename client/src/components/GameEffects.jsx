@@ -1,4 +1,5 @@
-import { COMBINATION_LABELS } from '@poker-tempel/shared';
+import { COMBINATION_LABELS, parseCard } from '@poker-tempel/shared';
+import CardFace from './CardFace.jsx';
 import { ordinal } from '../lib/format.js';
 
 export default function GameEffects({ effect }) {
@@ -57,6 +58,33 @@ export default function GameEffects({ effect }) {
           </p>
           <p className="mt-1 text-3xl font-black uppercase tracking-[0.2em] text-red-300">
             Rejected
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (effect.kind === 'selfBomb') {
+    const cards = effect.event.cards ?? [];
+
+    return (
+      <div key={effect.id} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 bg-orange-600/25 animate-bomb-flash" />
+        <div className="absolute left-1/2 top-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-red-300/80 animate-bomb-ring" />
+        <div className="relative flex flex-col items-center gap-3 rounded-2xl border border-red-400/50 bg-red-950/90 px-8 py-5 text-center shadow-2xl animate-finish-pop">
+          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-red-300/80">
+            Self bomb
+          </p>
+          <p className="text-2xl font-black uppercase tracking-[0.15em] text-red-300">
+            Last card was a 2
+          </p>
+          <div className="flex items-end justify-center">
+            {cards.map((key) => (
+              <CardFace key={key} card={parseCard(key)} size="md" disabled />
+            ))}
+          </div>
+          <p className="text-xs font-semibold text-emerald-200/70">
+            {effect.event.playerName} — round reset, discarding 3s again
           </p>
         </div>
       </div>
