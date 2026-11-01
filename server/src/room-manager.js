@@ -223,7 +223,14 @@ export function createRoomManager(options = {}) {
     const hostSeat = room.slots.findIndex(
       (slot) => slot?.playerId && slot.playerId === room.hostId,
     );
-    const base = { code: room.code, hostSeat, slots, yourSeat: viewerSeat, version: room.version };
+    const base = {
+      code: room.code,
+      hostSeat,
+      slots,
+      yourSeat: viewerSeat,
+      version: room.version,
+      turnTimeoutMs: config.turnTimeoutMs,
+    };
 
     if (!room.session) {
       return { ...base, status: SESSION_STATUS.LOBBY };
@@ -256,6 +263,7 @@ export function createRoomManager(options = {}) {
       turn: game.turn,
       turnDeadline: room.turnDeadline,
       activePlay: game.activePlay,
+      passedSeats: [...game.passedThisTrick],
       placements: [...game.placements],
       players,
       log: game.log.slice(-MAX_LOG_ENTRIES),

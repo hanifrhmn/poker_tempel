@@ -152,6 +152,8 @@ test('host starts a four-seat game and state hides opponents hands', (t) => {
   assert.equal(started.ok, true);
   assert.equal(started.state.status, SESSION_STATUS.PLAYING);
   assert.equal(started.state.round, 1);
+  assert.equal(started.state.turnTimeoutMs, 60_000);
+  assert.deepEqual(started.state.passedSeats, []);
   assert.equal(manager.startGame({ code, playerId: created.playerId }).error, 'Game already started');
 
   const hostState = manager.getStateFor(manager.getRoom(code), created.playerId);
@@ -213,7 +215,9 @@ test('validates plays and passes through the session', (t) => {
 
   const nextSeat = room.session.currentGame.turn;
   const nextPlayer = players.find((player) => player.seat === nextSeat);
-  assert.equal(manager.pass({ code, playerId: nextPlayer.playerId }).ok, true);
+  const passed = manager.pass({ code, playerId: nextPlayer.playerId });
+  assert.equal(passed.ok, true);
+  assert.ok(passed.state.passedSeats.includes(nextSeat));
 });
 
 test('completes a full round and starts the next with the winner leading', (t) => {

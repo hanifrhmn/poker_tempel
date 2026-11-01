@@ -10,7 +10,7 @@ Last updated: 2026-11-02
 | 1 | Core Game Engine | Done |
 | 2 | Session Flow & Opening Rules | Done |
 | 3 | Multiplayer Server | Done |
-| 4 | Frontend UI | Not started |
+| 4 | Frontend UI | Done |
 | 5 | Tempelan | Not started |
 | 6 | Bots (AI) | Not started |
 | 7 | Polish & LAN Testing | Not started |
@@ -132,6 +132,41 @@ Decisions:
 - `playerId` doubles as the reconnect secret (stored client-side in Phase 4) and is never shown to other players
 - Disconnected humans keep seat ownership during the grace period and can reclaim a bot-controlled seat; explicit leave relinquishes ownership
 - Bots are intentionally minimal in this phase (lowest single/pass) and will be upgraded in Phase 6
+
+## Phase 4 — Frontend UI
+
+Status: **Done**
+
+Built in `client/src/`:
+- `hooks/useRoom.js` — socket lifecycle, identity persistence, auto-rejoin on reload/reconnect, action wrapper with error toasts
+- `HomeScreen` — name entry, create room, join by 5-char code, invite-link prefill via `?room=CODE`
+- `LobbyScreen` — four seat cards with host/bot/online badges, add/remove bots (host), invite link with clipboard fallback for plain-HTTP LAN, start button gated on a full table
+- `GameScreen` — hand dock with click selection, Deselect/Pass/Play, live combination validation, opponent panels, active play, turn timer, action log, responsive table layout
+- `RoundEndOverlay` — placement list with round points and totals, host "Next round"/"End session"
+- `GameEndOverlay` — final standings by score, back to home
+- Shared components: `CardFace`, `PlayerPanel`, `ActionLog`, `TurnTimer`, `RoomHeader`, `ConnectionBanner`, `ErrorToast`, `CopyLinkButton`, `Button`
+
+Client behavior:
+- Own hand rendered from `room.you.hand`; opponents only expose counts/status (server privacy preserved)
+- Hand auto-sorted by rank/suit; selection validated with the shared engine (`detectCombination` + `canPlayCombination`) for instant UX, server re-validates every action
+- Player statuses: Your turn / Thinking / Passed / Waiting / Done, with 1st–4th badges and bot/offline indicators
+- Turn timer driven by server `turnDeadline` + newly exposed `turnTimeoutMs`; turns auto-play/pass server-side
+- Identity (`code`, `playerId`, `name`) stored in `localStorage`; refresh/reconnect auto-rejoins the same seat; leaving clears it
+- Invite links work over Radmin/ZeroTier IPs; copy uses `navigator.clipboard` with a `execCommand` fallback on insecure origins
+- Connection banner on socket loss; error toast for rejected actions
+
+Server additions:
+- `room:state` now exposes `turnTimeoutMs` and `passedSeats` (public info only)
+
+Verified:
+- `npm run build` → production bundle (290.6 kB JS / 89.7 kB gzip, 32.4 kB CSS)
+- `npm test` → 54/54 passing
+- Production smoke test: health OK, built client served, Socket.io create-room returns a lobby state with `turnTimeoutMs`
+- Browser-level 4-tab playthrough deferred to Phase 7 LAN testing (no browser available in this environment)
+
+Decisions:
+- No separate "ready" toggle — all connected players are considered ready and the host starts once seats are filled
+- Effects/sounds still deferred to Phase 7; the client already receives `game:event` payloads needed for them
 
 ## Rule revisions
 
