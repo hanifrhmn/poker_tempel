@@ -9,7 +9,7 @@ Last updated: 2026-11-02
 | 0 | Project Setup & Scaffolding | Done |
 | 1 | Core Game Engine | Done |
 | 2 | Session Flow & Opening Rules | Done |
-| 3 | Multiplayer Server | Not started |
+| 3 | Multiplayer Server | Done |
 | 4 | Frontend UI | Not started |
 | 5 | Tempelan | Not started |
 | 6 | Bots (AI) | Not started |
@@ -92,6 +92,47 @@ Decisions:
 - Scoring table is a placeholder (PRD defines no points): 1st = 3, 2nd = 2, 3rd = 1, 4th = 0; overridable via `scoreTable`
 - Session logic lives in `shared/` so the Phase 3 server remains authoritative and can reuse it directly
 
+## Phase 3 — Multiplayer Server
+
+Status: **Done**
+
+Built in `server/src/`:
+- `room-manager.js` — in-memory room lifecycle: 5-char room codes, create/join, host control, add/remove bots, start game, play/pass, next round, end session, leave, disconnect handling, turn/bot timers
+- `bot.js` — minimal rule-based controller (lowest single or pass) for lobby bots and disconnect takeover; full AI stays in Phase 6
+- `server.js` — Socket.io wiring, Express health/static serving, personalized `room:state` broadcasts, `game:event` feed
+- `index.js` — production bootstrap
+
+Socket API:
+- Client → server: `room:create`, `room:join` (with `playerId` for reconnect), `room:addBot`, `room:removeBot`, `room:start`, `room:nextRound`, `room:endSession`, `room:leave`, `game:play`, `game:pass`
+- Server → client: `room:state` (personalized; only `you.hand` is included) and `game:event` (one event per action)
+- All actions use ack callbacks with `{ ok, error? }`
+
+Authoritative state & privacy:
+- The server owns the session/engine; clients receive their own hand plus public info only (turn, active play, card counts, placements, scores, log)
+- `room:state` carries a monotonic `version` so pushes can be ordered/deduped
+- Internal engine Sets are never serialized
+
+Timers & reconnection:
+- Turn timer (default 30s): auto-pass when responding, auto-play the lowest single when leading
+- Bots act after a short pacing delay; lobby bots play automatically
+- Disconnect: 15s grace, then the seat becomes bot-controlled; reconnecting with the stored `playerId` restores human control
+- Host transfers to the next connected human on disconnect/leave; leaving mid-game converts the seat to a bot; abandoned rooms are deleted
+
+Effect-ready events:
+- Play events include `cards`, `combinationType`, `isBomb`, `beaten` (type/cards/primary rank/value/suit), and an `at` timestamp
+- `game-start`, `opening-threes`, `pass`, `trick-reset`, `finish`, and `game-over` are emitted in order for future sound/animation effects
+
+Verified:
+- `npm test` → 54/54 passing (37 shared + 17 server)
+- Four Socket.io clients create/join/start and play a complete round with private hands, then advance to round 2 with the winner leading
+- Timeout auto-play/pass, disconnect takeover, reconnect, host transfer, lobby leave, and effect events are covered by tests
+- Production `npm start` serves `/api/health` and the built client
+
+Decisions:
+- `playerId` doubles as the reconnect secret (stored client-side in Phase 4) and is never shown to other players
+- Disconnected humans keep seat ownership during the grace period and can reclaim a bot-controlled seat; explicit leave relinquishes ownership
+- Bots are intentionally minimal in this phase (lowest single/pass) and will be upgraded in Phase 6
+
 ## Rule revisions
 
 ### Tempelan v2 (2026-11-02)
@@ -107,10 +148,10 @@ PRD §2.7 and Timeline.md Phase 5 updated to the clarified rules (implementation
 - Turn passes to the next active player after resolution; timeout counts as rejection
 - Engine impact for Phase 5: needs a pending-vote state, both hands removed at play time, and attached-hand rollback on rejection (accepted play replaces the active combo with the attached combination)
 
-## Planned enhancements (approved, not yet built)
+## Planned enhancements
 
-- **Effect-ready event design (Phase 3):** one socket event per action (`play`, `pass`, `trick-reset`, `finish`, `game-over`) with seat, cards, combo type, beaten combo, timestamps, and an explicit bomb flag; serialize public state (Sets → arrays)
-- **Effects stack (Phase 7):** CSS keyframes + Web Audio API only (no animation library, no external CDNs); sounds for card play, turn alert, bomb, and win; explosion effect on bomb plays; slam effect on fast beats using event timing; effects also fire on bot turns
+- **Effect-ready event design** — implemented in Phase 3: one socket event per action (`play`, `pass`, `trick-reset`, `finish`, `game-over`) with seat, cards, combo type, beaten combo, timestamps, and an explicit bomb flag; personalized serializable state with a monotonic version
+- **Effects stack (Phase 7, not built):** CSS keyframes + Web Audio API only (no animation library, no external CDNs); sounds for card play, turn alert, bomb, and win; explosion effect on bomb plays; slam effect on fast beats using event timing; effects also fire on bot turns
 
 ## How this file is maintained
 

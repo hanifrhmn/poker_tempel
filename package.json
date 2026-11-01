@@ -14,7 +14,7 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "test": "npm test -w shared"
+    "test": "npm run test -w shared && npm run test -w server"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

@@ -71,6 +71,10 @@ test('enforces turns, hand ownership, and valid combinations', () => {
   assert.equal(state.turn, 1);
   assert.equal(state.activePlay.playerIndex, 0);
 
+  const firstPlayLog = state.log.filter((entry) => entry.type === 'play').at(-1);
+  assert.equal(firstPlayLog.isBomb, false);
+  assert.equal(firstPlayLog.beaten, null);
+
   const state2 = game([
     ['3S', '5S', '7S'],
     ['4S', '6S', '8S'],
@@ -168,6 +172,12 @@ test('allows a bomb on a single 2 and chains higher bombs of the same kind', () 
   assert.equal(bomb.finished, true);
   assert.equal(bomb.placement, 1);
   assert.equal(state.turn, 2);
+
+  const bombLog = state.log.filter((entry) => entry.type === 'play').at(-1);
+  assert.equal(bombLog.isBomb, true);
+  assert.equal(bombLog.beaten.type, 'single');
+  assert.equal(bombLog.beaten.primaryRank, '2');
+  assert.equal(typeof bombLog.at, 'number');
 
   assert.equal(
     playCards(state, 2, ['7S']).error,

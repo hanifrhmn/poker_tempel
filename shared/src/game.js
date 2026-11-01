@@ -1,5 +1,5 @@
 import { cardKey, createDeck, deal, parseCard, shuffle, sortHand } from './cards.js';
-import { canPlayCombination, detectCombination } from './combinations.js';
+import { canPlayCombination, detectCombination, isBomb } from './combinations.js';
 
 export const PLAYER_COUNT = 4;
 
@@ -144,6 +144,16 @@ export function playCards(state, playerIndex, keys) {
     playerIndex,
     combinationType: combination.type,
     cards: cards.map(cardKey),
+    isBomb: isBomb(combination),
+    beaten: active
+      ? {
+          type: active.type,
+          cards: active.cards.map(cardKey),
+          primaryRank: active.primaryRank,
+          primaryValue: active.primaryValue,
+          suit: active.suit,
+        }
+      : null,
     message: `${player.name} played ${combination.type}`,
   });
 
