@@ -9,12 +9,14 @@ import {
 import ActionLog from './ActionLog.jsx';
 import Button from './Button.jsx';
 import CardFace from './CardFace.jsx';
+import GameEffects from './GameEffects.jsx';
 import GameEndOverlay from './GameEndOverlay.jsx';
 import PlayerPanel from './PlayerPanel.jsx';
 import RoomHeader from './RoomHeader.jsx';
 import RoundEndOverlay from './RoundEndOverlay.jsx';
 import TempelanVotePanel from './TempelanVotePanel.jsx';
 import TurnTimer from './TurnTimer.jsx';
+import { useGameEffects } from '../hooks/useGameEffects.js';
 import { ordinal } from '../lib/format.js';
 
 export default function GameScreen({ room, send, onLeave }) {
@@ -38,6 +40,7 @@ export default function GameScreen({ room, send, onLeave }) {
   const currentPlayer = playerBySeat[room.turn];
   const activePlayer = room.activePlay ? playerBySeat[room.activePlay.playerIndex] : null;
   const me = playerBySeat[mySeat];
+  const effect = useGameEffects({ room, mySeat });
 
   useEffect(() => {
     setSelected(new Set());
@@ -179,7 +182,11 @@ export default function GameScreen({ room, send, onLeave }) {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.16),transparent_65%)]" />
       <RoomHeader room={room} onLeave={onLeave} />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-3 sm:px-6">
+      <main
+        className={`relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-3 sm:px-6 ${
+          effect?.kind === 'bomb' || effect?.kind === 'slam' ? 'animate-screen-shake' : ''
+        }`}
+      >
         <section className="relative mt-3 flex-1">
           <div className="relative grid grid-cols-3 gap-2 md:h-40 md:block">
             {opponents.map((seat, index) => (
@@ -216,14 +223,18 @@ export default function GameScreen({ room, send, onLeave }) {
 
               {active ? (
                 <>
-                  <div className="flex items-end justify-center pt-2">
-                    {active.cards.map((card) => (
+                  <div
+                    key={`${room.activePlay.playerIndex}-${active.cards.map(cardKey).join('-')}`}
+                    className="flex items-end justify-center pt-2"
+                  >
+                    {active.cards.map((card, index) => (
                       <CardFace
                         key={cardKey(card)}
                         card={card}
                         size="lg"
                         disabled
-                        className="-ml-4 first:ml-0 sm:-ml-6"
+                        className="-ml-4 first:ml-0 sm:-ml-6 animate-card-play"
+                        style={{ animationDelay: `${index * 35}ms` }}
                       />
                     ))}
                   </div>
@@ -247,7 +258,13 @@ export default function GameScreen({ room, send, onLeave }) {
           </div>
         </section>
 
-        <section className="sticky bottom-0 z-20 mt-3 rounded-2xl border border-emerald-800/60 bg-emerald-900/85 p-3 shadow-2xl shadow-black/40 backdrop-blur">
+        <section
+          className={`sticky bottom-0 z-20 mt-3 rounded-2xl border bg-emerald-900/85 p-3 shadow-2xl shadow-black/40 backdrop-blur transition-shadow ${
+            isMyTurn && !hasPendingTempelan
+              ? 'border-amber-400/70 ring-2 ring-amber-400/40'
+              : 'border-emerald-800/60'
+          }`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-300/60">
@@ -308,7 +325,10 @@ export default function GameScreen({ room, send, onLeave }) {
           </div>
 
           <div className="mt-2 overflow-x-auto pb-1">
-            <div className="mx-auto flex min-w-max items-end justify-center px-3 pt-4">
+            <div
+              key={`hand-${room.round}`}
+              className="mx-auto flex min-w-max items-end justify-center px-3 pt-4"
+            >
               {hand.map((card, index) => {
                 const key = cardKey(card);
                 const isMain = tempelMode && tempelMain.includes(key);
@@ -323,7 +343,8 @@ export default function GameScreen({ room, send, onLeave }) {
                     highlight={isMain ? 'sky' : 'amber'}
                     disabled={locked}
                     onClick={locked ? undefined : () => toggle(card)}
-                    className={index === 0 ? '' : '-ml-3 sm:-ml-5'}
+                    className={`${index === 0 ? '' : '-ml-3 sm:-ml-5'} animate-deal`}
+                    style={{ animationDelay: `${Math.min(index, 14) * 25}ms` }}
                   />
                 );
               })}
@@ -352,6 +373,7 @@ export default function GameScreen({ room, send, onLeave }) {
         <RoundEndOverlay room={room} send={send} isHost={isHost} />
       ) : null}
       {room.status === 'game-end' ? <GameEndOverlay room={room} onLeave={onLeave} /> : null}
+      <GameEffects effect={effect} />
     </div>
   );
 }

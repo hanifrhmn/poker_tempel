@@ -1,4 +1,6 @@
+import ConnectionQuality from './ConnectionQuality.jsx';
 import CopyLinkButton from './CopyLinkButton.jsx';
+import SoundToggle from './SoundToggle.jsx';
 
 export default function RoomHeader({ room, onLeave }) {
   const leave = () => {
@@ -15,8 +17,10 @@ export default function RoomHeader({ room, onLeave }) {
           {room.code}
         </span>
       </div>
-      <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-emerald-300/70">
+      <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-emerald-300/70">
         {room.round > 0 ? <span>Round {room.round}</span> : <span>Lobby</span>}
+        <ConnectionQuality />
+        <SoundToggle />
         <CopyLinkButton
           code={room.code}
           label="Copy link"

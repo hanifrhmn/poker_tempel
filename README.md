@@ -32,9 +32,24 @@ npm run build
 npm start
 ```
 
-Then open `http://<your Radmin/ZeroTier IPv4>:3000` on every player's machine.
+Host setup:
+1. Run the commands above on the host machine.
+2. Find the host's Radmin/ZeroTier IPv4 (`ipconfig`).
+3. Allow Node.js / TCP port `3000` through Windows Firewall if prompted.
+4. Open `http://<host-ip>:3000`, create a room, and share the invite link.
+5. Friends open the link or enter the room code.
+
+In-game:
+- Click cards to select, then **Play** (or **Pass** / **Deselect**).
+- **Tempel** attaches one extra hand to your play; every active player votes.
+- Sound can be toggled in the header (or on the home screen). Audio starts after your first click or keypress.
+- If someone disconnects, their seat becomes a bot after 15 seconds; reconnecting from the same browser restores control.
 
 Environment variables: `PORT` (default `3000`), `HOST` (default `0.0.0.0`).
+
+Troubleshooting:
+- Friends cannot connect? Verify the host IP, VPN membership, and that Windows Firewall allows TCP port `3000`.
+- Dev mode serves Vite on `:5173`; use the production commands above for game night.
 
 ## Docs
 

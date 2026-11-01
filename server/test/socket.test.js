@@ -290,6 +290,22 @@ test('four socket clients can play a full round and advance to round 2', async (
   assert.equal(next.state.turn, finalState.lastRoundResult.placements[0]);
 });
 
+test('server answers latency pings', async (t) => {
+  const { server, url } = await startServer();
+  const client = await connectClient(url);
+
+  t.after(async () => {
+    client.disconnect();
+    await server.close();
+  });
+
+  const sentAt = Date.now();
+  const response = await new Promise((resolve) => client.emit('client:ping', sentAt, resolve));
+
+  assert.equal(response.sentAt, sentAt);
+  assert.equal(typeof response.serverTime, 'number');
+});
+
 test('socket clients can play a tempelan and vote on it', async (t) => {
   const { server, url } = await startServer({
     turnTimeoutMs: 60_000,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getRoomFromUrl, loadName, saveName } from '../lib/storage.js';
 import Button from './Button.jsx';
+import SoundToggle from './SoundToggle.jsx';
 
 export default function HomeScreen({ connected, busy, onCreate, onJoin }) {
   const [name, setName] = useState(() => loadName());
@@ -92,9 +93,12 @@ export default function HomeScreen({ connected, busy, onCreate, onJoin }) {
             </form>
           </div>
 
-          <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-wider text-emerald-300/60">
-            <span className={`size-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-500'}`} />
-            {connected ? 'Server connected' : 'Waiting for server…'}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-wider text-emerald-300/60">
+            <span className="flex items-center gap-2">
+              <span className={`size-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-500'}`} />
+              {connected ? 'Server connected' : 'Waiting for server…'}
+            </span>
+            <SoundToggle />
           </div>
         </div>
 

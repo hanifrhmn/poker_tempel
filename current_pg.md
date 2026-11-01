@@ -13,7 +13,7 @@ Last updated: 2026-11-02
 | 4 | Frontend UI | Done |
 | 5 | Tempelan | Done |
 | 6 | Bots (AI) | Done |
-| 7 | Polish & LAN Testing | Not started |
+| 7 | Polish & LAN Testing | Done |
 
 Legend: `Not started` · `In progress` · `Done`
 
@@ -237,6 +237,32 @@ Decisions:
 - Bots do not initiate tempelan (not required by PRD §5); they still vote on them
 - Bot decisions remain synchronous and side-effect free; randomness is injectable for deterministic tests
 
+## Phase 7 — Polish & LAN Testing
+
+Status: **Done** (implementation verified; physical 4-player Radmin/ZeroTier run is the only remaining manual step)
+
+Built:
+- **Sound** (`client/src/lib/audio.js`) — Web Audio API synthesis with no external assets or CDNs: card play, pass, turn alert, slam, bomb, and win sounds. Mute toggle persists in `localStorage`; audio unlocks on the first click/keypress.
+- **Effects** (`useGameEffects`, `GameEffects`, `effectRules`):
+  - active cards animate in; hands deal with a staggered animation
+  - **bomb explosion** overlay with screen shake and boom sound
+  - **slam** effect on beats within 2.5s, using server event timestamps
+  - finish popup + win jingle; all effects also fire on bot turns
+- **Connection quality** — `client:ping`/ack RTT measured every 5s with a Good/Fair/Poor indicator in the header; disconnect banner and auto-rejoin were already in place
+- **Polish** — richer card faces (corner suits, gradients), mini card-back counters on opponent panels, turn glow on the hand dock, scroll-safe round/game overlays, updated home/game copy
+
+Verified:
+- `npm test` → 83/83 passing (47 shared + 31 server + 5 client)
+- Client effect-rule tests cover bomb/slam/timing/finish/pass classification; server socket test covers latency pings
+- `npm run build` → 304.95 kB JS / 94.05 kB gzip, 43.77 kB CSS / 7.92 kB gzip
+- **LAN-interface smoke test** — server bound to `0.0.0.0`, reached through the Wi-Fi IPv4 (`192.168.18.98`): health OK, built client served (200), Socket.io connected, room created with three bots, game started (`playing`, host hand dealt)
+- Physical 4-player Radmin/ZeroTier run remains for the user's own network
+
+Final PRD audit:
+- All gameplay, lobby, UI, bot, tempelan, reconnection, and LAN requirements are implemented
+- Documented interpretations remain: round-1 3s discard opening, bomb chaining, trick reset when all remaining players pass, placeholder 3/2/1/0 score table, tempelan v2, bot lead heuristic
+- Known limits: rooms are in-memory (a server restart clears them); the LAN smoke test used the local Wi-Fi adapter rather than the actual VPN adapters; no browser automation was available for UI E2E, so the 4-tab visual playthrough is part of the manual game-night check
+
 ## Rule revisions
 
 ### Tempelan v2 (2026-11-02)
@@ -255,7 +281,7 @@ PRD §2.7 and Timeline.md Phase 5 were updated to the clarified rules; **impleme
 ## Planned enhancements
 
 - **Effect-ready event design** — implemented in Phase 3: one socket event per action (`play`, `pass`, `trick-reset`, `finish`, `game-over`) with seat, cards, combo type, beaten combo, timestamps, and an explicit bomb flag; personalized serializable state with a monotonic version
-- **Effects stack (Phase 7, not built):** CSS keyframes + Web Audio API only (no animation library, no external CDNs); sounds for card play, turn alert, bomb, and win; explosion effect on bomb plays; slam effect on fast beats using event timing; effects also fire on bot turns
+- **Effects stack** — implemented in Phase 7: CSS keyframes + Web Audio API only (no animation library, no external CDNs); sounds for card play, turn alert, bomb, and win; explosion effect on bomb plays; slam effect on fast beats using event timing; effects also fire on bot turns
 
 ## How this file is maintained
 

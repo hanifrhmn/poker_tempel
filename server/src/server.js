@@ -50,6 +50,12 @@ export function createPokerServer(options = {}) {
   io.on('connection', (socket) => {
     socket.emit('server:hello', { message: `Welcome to ${GAME_NAME}` });
 
+    socket.on('client:ping', (sentAt, callback) => {
+      if (typeof callback === 'function') {
+        callback({ sentAt, serverTime: Date.now() });
+      }
+    });
+
     const reply = (callback, result) => {
       if (typeof callback === 'function') callback(result);
     };

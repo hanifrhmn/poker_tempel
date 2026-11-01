@@ -6,7 +6,7 @@ export default function GameEndOverlay({ room, onLeave }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-emerald-950/85 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-3xl border border-amber-400/30 bg-emerald-900 p-6 shadow-2xl shadow-black/50">
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-3xl border border-amber-400/30 bg-emerald-900 p-6 shadow-2xl shadow-black/50">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.35em] text-amber-300/70">
           Session complete
         </p>

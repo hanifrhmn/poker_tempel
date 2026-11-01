@@ -51,7 +51,14 @@ export default function PlayerPanel({ player, isTurn, passed, isHost, isYou }) {
           </div>
         </div>
         <div className="text-right">
-          <p className="text-lg font-black leading-none text-amber-200">{player.cardCount}</p>
+          <div className="flex items-center justify-end gap-1.5">
+            <span className="relative inline-block h-6 w-4 rounded-sm border border-emerald-300/30 bg-gradient-to-br from-emerald-600 to-emerald-900 shadow-sm">
+              <span className="absolute inset-0.5 rounded-[2px] border border-emerald-300/20" />
+            </span>
+            <span className="text-lg font-black leading-none text-amber-200">
+              {player.cardCount}
+            </span>
+          </div>
           <p className="text-[9px] uppercase tracking-wider text-emerald-400/60">cards</p>
         </div>
       </div>
