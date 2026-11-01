@@ -72,6 +72,21 @@ test('self bombs trigger the explosion effect', () => {
   assert.equal(effect.sound, 'bomb');
 });
 
+test('bomb battles trigger the explosion effect', () => {
+  const effect = classifyGameEvent(
+    {
+      type: 'bomb-battle',
+      playerName: 'A',
+      bombs: [{ playerIndex: 0, cards: ['5S', '5H', '5D', '5C'] }],
+      at: 1000,
+    },
+    null,
+  );
+
+  assert.equal(effect.kind, 'bombBattle');
+  assert.equal(effect.sound, 'bomb');
+});
+
 test('last play timestamp updates only on play events', () => {
   assert.equal(nextLastPlayAt({ type: 'play', at: 123 }, null), 123);
   assert.equal(nextLastPlayAt({ type: 'pass', at: 456 }, 123), 123);

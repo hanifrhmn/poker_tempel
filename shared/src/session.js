@@ -47,11 +47,13 @@ export function createSession({ players, scoreTable = DEFAULT_SCORE_TABLE, maxRo
       isBot: Boolean(player?.isBot),
       score: 0,
       wins: 0,
+      bombLosses: 0,
       placements: [],
     })),
     currentGame: null,
     lastRoundResult: null,
     lastSelfBomb: null,
+    lastBombResult: null,
   };
 }
 
@@ -90,7 +92,10 @@ export function startSession(session, { rng = Math.random } = {}) {
   return startNextRound(session, { rng });
 }
 
-export function startNextRound(session, { rng = Math.random, forceOpening = false } = {}) {
+export function startNextRound(
+  session,
+  { rng = Math.random, forceOpening = false, openingReason = null } = {},
+) {
   const canStart =
     session.status === SESSION_STATUS.LOBBY ||
     session.status === SESSION_STATUS.ROUND_END ||
@@ -126,7 +131,9 @@ export function startNextRound(session, { rng = Math.random, forceOpening = fals
         playerIndex,
         cards: hand.filter((card) => card.rank === '3').map(cardKey),
       })),
-      reason: session.round === 1 ? 'first-round' : forceOpening ? 'self-bomb' : 'bomb',
+      reason:
+        openingReason ??
+        (session.round === 1 ? 'first-round' : forceOpening ? 'self-bomb' : 'bomb'),
     };
   } else {
     startingPlayerIndex = session.lastRoundResult.placements[0];
@@ -169,7 +176,11 @@ export function resetRoundAfterSelfBomb(
   const oldGame = session.currentGame;
   const playerName = oldGame?.players[playerIndex]?.name ?? `Player ${playerIndex + 1}`;
   const at = Date.now();
-  const started = startNextRound(session, { rng, forceOpening: true });
+  const started = startNextRound(session, {
+    rng,
+    forceOpening: true,
+    openingReason: 'self-bomb',
+  });
   if (!started.ok) return started;
 
   const event = {
@@ -187,18 +198,70 @@ export function resetRoundAfterSelfBomb(
   return { ...started, selfBomb: event };
 }
 
+export function resetRoundAfterBombBattle(
+  session,
+  { loserSeat, bombs = [], rng = Math.random } = {},
+) {
+  if (session.status !== SESSION_STATUS.PLAYING) {
+    return fail('Round is not in progress');
+  }
+
+  const oldGame = session.currentGame;
+  const loser = session.players[loserSeat];
+  const playerName =
+    oldGame?.players[loserSeat]?.name ?? loser?.name ?? `Player ${loserSeat + 1}`;
+  const at = Date.now();
+
+  const started = startNextRound(session, {
+    rng,
+    forceOpening: true,
+    openingReason: 'bomb-battle',
+  });
+  if (!started.ok) return started;
+
+  const event = {
+    type: 'bomb-battle',
+    at,
+    loserSeat,
+    playerName,
+    bombs: bombs.map((bomb) => ({ ...bomb, cards: [...bomb.cards] })),
+    message: `${playerName} lost the bomb battle with the last bomb!`,
+  };
+
+  started.game.log.unshift(event);
+  if (loser) loser.bombLosses += 1;
+  session.lastBombResult = event;
+
+  return { ...started, bombBattle: event };
+}
+
+function finishAction(session, result) {
+  if (!result.ok) {
+    result.sessionStatus = session.status;
+    return result;
+  }
+
+  if (session.currentGame.status === 'bomb-end') {
+    result.bombEnd = true;
+    result.sessionStatus = session.status;
+    return result;
+  }
+
+  if (session.currentGame.status === 'finished') {
+    completeRound(session);
+    result.roundOver = true;
+  }
+
+  result.sessionStatus = session.status;
+  return result;
+}
+
 export function play(session, playerIndex, cardKeys) {
   if (session.status !== SESSION_STATUS.PLAYING) {
     return fail('Round is not in progress');
   }
 
-  const result = playCards(session.currentGame, playerIndex, cardKeys);
-  if (result.ok && session.currentGame.status === 'finished') {
-    completeRound(session);
-    result.roundOver = true;
-  }
-  result.sessionStatus = session.status;
-  return result;
+  return finishAction(session, playCards(session.currentGame, playerIndex, cardKeys));
 }
 
 export function pass(session, playerIndex) {
@@ -206,13 +269,7 @@ export function pass(session, playerIndex) {
     return fail('Round is not in progress');
   }
 
-  const result = passTurn(session.currentGame, playerIndex);
-  if (result.ok && session.currentGame.status === 'finished') {
-    completeRound(session);
-    result.roundOver = true;
-  }
-  result.sessionStatus = session.status;
-  return result;
+  return finishAction(session, passTurn(session.currentGame, playerIndex));
 }
 
 export function playTempelan(session, playerIndex, mainCards, attachedCards) {
@@ -220,13 +277,10 @@ export function playTempelan(session, playerIndex, mainCards, attachedCards) {
     return fail('Round is not in progress');
   }
 
-  const result = startTempelan(session.currentGame, playerIndex, mainCards, attachedCards);
-  if (result.ok && session.currentGame.status === 'finished') {
-    completeRound(session);
-    result.roundOver = true;
-  }
-  result.sessionStatus = session.status;
-  return result;
+  return finishAction(
+    session,
+    startTempelan(session.currentGame, playerIndex, mainCards, attachedCards),
+  );
 }
 
 export function castTempelanVote(session, voterSeat, vote) {
@@ -234,13 +288,7 @@ export function castTempelanVote(session, voterSeat, vote) {
     return fail('Round is not in progress');
   }
 
-  const result = submitTempelanVote(session.currentGame, voterSeat, vote);
-  if (result.ok && session.currentGame.status === 'finished') {
-    completeRound(session);
-    result.roundOver = true;
-  }
-  result.sessionStatus = session.status;
-  return result;
+  return finishAction(session, submitTempelanVote(session.currentGame, voterSeat, vote));
 }
 
 export function resolveTempelanVote(session, accepted = false) {
@@ -248,13 +296,7 @@ export function resolveTempelanVote(session, accepted = false) {
     return fail('Round is not in progress');
   }
 
-  const result = resolvePendingTempelan(session.currentGame, accepted);
-  if (result.ok && session.currentGame.status === 'finished') {
-    completeRound(session);
-    result.roundOver = true;
-  }
-  result.sessionStatus = session.status;
-  return result;
+  return finishAction(session, resolvePendingTempelan(session.currentGame, accepted));
 }
 
 export function endSession(session) {

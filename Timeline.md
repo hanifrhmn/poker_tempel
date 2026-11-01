@@ -101,7 +101,7 @@ Each phase ships a working commit pushed to `main`. Progress is tracked in `curr
 
 - Tempel button always available (beating or leading)
 - Main hand: any valid combo under normal play rules
-- Attach exactly one extra hand of any rank/type (e.g. Q+K, Q+pair, Q+polo); bombs cannot be attached
+- Attach exactly one extra hand of any rank/type (e.g. Q+K, Q+pair, Q+polo); bombs cannot be used in a Tempelan (main or attached)
 - Other players still in the game vote Yes/No (finished players cannot vote)
 - All yes → accepted: attached hand survives and becomes the active combo the next player must beat
 - Any no → rejected: only the attached hand returns to the player's hand; the main hand remains the active play

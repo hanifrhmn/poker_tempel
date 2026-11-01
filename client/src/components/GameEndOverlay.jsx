@@ -34,7 +34,8 @@ export default function GameEndOverlay({ room, onLeave }) {
               <div className="shrink-0 text-right">
                 <p className="text-sm font-black text-amber-200">{player.score} pts</p>
                 <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-300/60">
-                  {player.wins} {player.wins === 1 ? 'win' : 'wins'}
+                  {player.wins} {player.wins === 1 ? 'win' : 'wins'} ·{' '}
+                  {player.bombLosses ?? 0} bomb {player.bombLosses === 1 ? 'loss' : 'losses'}
                 </p>
               </div>
             </li>

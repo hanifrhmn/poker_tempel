@@ -29,6 +29,7 @@ export function useGameEffects({ room, mySeat }) {
           'tempelanAccepted',
           'tempelanRejected',
           'selfBomb',
+          'bombBattle',
         ].includes(classified.kind)
       ) {
         setEffect({
@@ -42,7 +43,7 @@ export function useGameEffects({ room, mySeat }) {
         const holdMs =
           classified.kind === 'bomb'
             ? 1400
-            : classified.kind === 'selfBomb'
+            : classified.kind === 'selfBomb' || classified.kind === 'bombBattle'
               ? 2200
               : classified.kind === 'tempelanAccepted' ||
                   classified.kind === 'tempelanRejected'

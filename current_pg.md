@@ -280,17 +280,19 @@ Final PRD audit:
 - If the player can pass (an active play exists), passing is allowed; the self bomb triggers when they are forced to lead. Bots filter illegal final 2 combinations and are handled by the same self-bomb path.
 - Client shows the self-bomb overlay with the last 2, validates the finishing rule before allowing Play, and shows the reason in the opening reveal.
 
-### Bomb reset for the next round
+### Bomb battle
 
-- The engine records `bombPlayed` whenever a bomb is actually played, including a bomb used as a Tempelan main hand.
-- `completeRound` stores `bombPlayed` in `lastRoundResult`; `startNextRound` repeats the 3-discard opening (3♠ holder leads) when the previous round had a bomb, with the opening reason `bomb`.
-- The opening overlay displays whether it is the first round, a bomb reset, or a self-bomb reset.
+- A bomb does not end the round instantly and no longer waits for the next round. When a bomb is played, the turn passes and other active players may play a higher bomb of the same class or pass. The chain ends when all other active players have passed (or none remain).
+- The **last player to play a bomb loses**: the round is aborted without scoring, the loser's `bombLosses` counter increments, a `bomb-battle` event is logged/emitted, and a new round starts immediately with the 3-discard opening (`bomb-battle` reason).
+- Bombs cannot be used in a Tempelan (main or attached), so every bomb is an active play that can trigger a battle.
+- The client shows a bomb-battle overlay (loser + last bomb + explosion), then the 3-discard reveal; standings show bomb losses.
+- The old `bombPlayed` flag / next-round opening path remains as a defensive fallback but is superseded by the immediate bomb-battle reset.
 
 ### Verification
 
-- `npm test` → 94/94 passing (52 shared + 34 server + 8 client)
-- Build → 311.59 kB JS / 95.50 kB gzip, 46.30 kB CSS / 8.18 kB gzip
-- New tests cover the final-2 rule (engine + client validation helpers), Tempelan final checks, bomb tracking, bomb-reset opening, self-bomb reset, room-manager self-bomb triggering, and bot filtering.
+- `npm test` → 98/98 passing (54 shared + 35 server + 9 client)
+- Build → 313.13 kB JS / 95.70 kB gzip, 46.48 kB CSS / 8.21 kB gzip
+- Tests cover the final-2 rule, Tempelan final checks, bomb battle chain + loser, bomb-battle reset, self-bomb reset, room-manager reset triggers, bot filtering/chains, and client effect classification.
 
 ## Rule revisions
 
@@ -300,7 +302,7 @@ PRD §2.7 and Timeline.md Phase 5 were updated to the clarified rules; **impleme
 
 - Tempel button is always available — every turn, whether beating or leading a fresh trick
 - Main hand: any valid combo under normal play rules
-- Attach exactly one extra valid hand of any rank/type (e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`); bombs cannot be attached
+- Attach exactly one extra valid hand of any rank/type (e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`); bombs cannot be used in a Tempelan (main or attached)
 - Voters: the other players still in the game — players who already finished cannot vote
 - All yes → accepted: attached hand survives and becomes the active combo the next player must beat
 - Any no → rejected: only the attached hand returns to the player's hand; the main hand stays as the active play

@@ -88,7 +88,9 @@ export default function GameScreen({ room, send, onLeave }) {
       !isBomb(attachedCombination) &&
       tempelFinalLegal,
   );
-  const canStartTempel = Boolean(canPlay && hand.length > selected.size);
+  const canStartTempel = Boolean(
+    canPlay && !isBomb(combination) && hand.length > selected.size,
+  );
 
   const toggle = (card) => {
     const key = cardKey(card);

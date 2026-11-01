@@ -39,7 +39,9 @@ export default function OpeningSequence({ opening, players, mySeat }) {
       ? 'A bomb was played — everyone discards their 3s again; the 3♠ holder leads.'
       : opening.reason === 'self-bomb'
         ? 'Self bomb! Everyone discards their 3s again; the 3♠ holder leads.'
-        : 'Everyone reveals their 3s — the 3♠ holder leads first.';
+        : opening.reason === 'bomb-battle'
+          ? 'Bomb battle! Everyone discards their 3s again; the 3♠ holder leads.'
+          : 'Everyone reveals their 3s — the 3♠ holder leads first.';
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-emerald-950/90 p-4 backdrop-blur-sm">

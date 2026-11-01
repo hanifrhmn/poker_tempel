@@ -9,6 +9,7 @@ import {
   pass as passSession,
   play as playSession,
   playTempelan as playTempelanSession,
+  resetRoundAfterBombBattle,
   resetRoundAfterSelfBomb,
   resolveTempelanVote as resolveTempelanVoteSession,
   sortHand,
@@ -198,6 +199,11 @@ export function createRoomManager(options = {}) {
       if (result.resolved) break;
     }
 
+    if (game.status === 'bomb-end') {
+      triggerBombBattleReset(room);
+      return;
+    }
+
     const events = game.log.slice(logStart);
     syncTimers(room);
     emitUpdate(room);
@@ -212,6 +218,11 @@ export function createRoomManager(options = {}) {
     const logStart = game.log.length;
     const result = resolveTempelanVoteSession(room.session, false);
     if (!result.ok) return;
+
+    if (game.status === 'bomb-end') {
+      triggerBombBattleReset(room);
+      return;
+    }
 
     const events = game.log.slice(logStart);
     syncTimers(room);
@@ -261,7 +272,9 @@ export function createRoomManager(options = {}) {
           ? 'Bomb reset'
           : opening.reason === 'self-bomb'
             ? 'Self bomb reset'
-            : 'All 3s discarded';
+            : opening.reason === 'bomb-battle'
+              ? 'Bomb battle reset'
+              : 'All 3s discarded';
       const event = {
         type: 'opening-complete',
         at: Date.now(),
@@ -302,6 +315,26 @@ export function createRoomManager(options = {}) {
     for (const event of events) emitGameEvent(room, event);
   }
 
+  function triggerBombBattleReset(room) {
+    const session = room.session;
+    const game = session?.currentGame;
+    const battle = game?.bombBattle;
+    if (!battle || battle.loser === null || battle.loser === undefined) return;
+
+    const result = resetRoundAfterBombBattle(session, {
+      loserSeat: battle.loser,
+      bombs: battle.bombs,
+    });
+    if (!result.ok) return;
+
+    if (result.opening) beginOpening(room, result.opening);
+
+    const events = [...result.game.log];
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+  }
+
   function syncTimers(room) {
     clearActionTimers(room);
 
@@ -309,6 +342,11 @@ export function createRoomManager(options = {}) {
     if (!session || session.status !== SESSION_STATUS.PLAYING) {
       room.turnDeadline = null;
       clearTempelTimers(room);
+      return;
+    }
+
+    if (session.currentGame.status === 'bomb-end') {
+      triggerBombBattleReset(room);
       return;
     }
 
@@ -359,6 +397,11 @@ export function createRoomManager(options = {}) {
         : passSession(room.session, seat);
 
     if (!result.ok) return result;
+
+    if (room.session.currentGame.status === 'bomb-end') {
+      triggerBombBattleReset(room);
+      return result;
+    }
 
     const events = game.log.slice(logStart);
     syncTimers(room);
@@ -458,6 +501,7 @@ export function createRoomManager(options = {}) {
         placement: player.placement,
         score: stats.score,
         wins: stats.wins,
+        bombLosses: stats.bombLosses ?? 0,
         placements: [...stats.placements],
       };
     });
@@ -715,6 +759,11 @@ export function createRoomManager(options = {}) {
     const result = playTempelanSession(room.session, seat, mainCards, attachedCards);
     if (!result.ok) return result;
 
+    if (room.session.currentGame.status === 'bomb-end') {
+      triggerBombBattleReset(room);
+      return { ...result, state: getStateFor(room, playerId) };
+    }
+
     const events = game.log.slice(logStart);
     syncTimers(room);
     emitUpdate(room);
@@ -740,6 +789,11 @@ export function createRoomManager(options = {}) {
     const logStart = game.log.length;
     const result = castTempelanVoteSession(room.session, seat, vote);
     if (!result.ok) return result;
+
+    if (room.session.currentGame.status === 'bomb-end') {
+      triggerBombBattleReset(room);
+      return { ...result, state: getStateFor(room, playerId) };
+    }
 
     const events = game.log.slice(logStart);
     syncTimers(room);

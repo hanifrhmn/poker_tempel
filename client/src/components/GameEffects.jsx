@@ -64,6 +64,40 @@ export default function GameEffects({ effect }) {
     );
   }
 
+  if (effect.kind === 'bombBattle') {
+    const bombs = effect.event.bombs ?? [];
+    const lastBomb = bombs[bombs.length - 1];
+
+    return (
+      <div key={effect.id} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 bg-red-600/20 animate-bomb-flash" />
+        <div className="absolute left-1/2 top-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-amber-300/80 animate-bomb-ring" />
+        <div className="relative flex flex-col items-center gap-3 rounded-2xl border border-amber-400/50 bg-emerald-950/90 px-8 py-5 text-center shadow-2xl animate-finish-pop">
+          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-amber-300/80">
+            Bomb battle
+          </p>
+          <p className="text-2xl font-black uppercase tracking-[0.15em] text-red-300">
+            {effect.event.playerName} loses
+          </p>
+          <div className="flex items-end justify-center">
+            {(lastBomb?.cards ?? []).map((key) => (
+              <CardFace
+                key={key}
+                card={parseCard(key)}
+                size="md"
+                disabled
+                className="-ml-3 first:ml-0"
+              />
+            ))}
+          </div>
+          <p className="text-xs font-semibold text-emerald-200/70">
+            Last bomb — round reset, discarding 3s again
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (effect.kind === 'selfBomb') {
     const cards = effect.event.cards ?? [];
 

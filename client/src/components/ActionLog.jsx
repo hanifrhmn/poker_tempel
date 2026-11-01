@@ -48,6 +48,8 @@ function describe(entry, players) {
       return entry.message ?? 'All 3s discarded';
     case 'self-bomb':
       return entry.message ?? 'Self bomb — round reset';
+    case 'bomb-battle':
+      return entry.message ?? 'Bomb battle — round reset';
     default:
       return entry.message ?? entry.type;
   }

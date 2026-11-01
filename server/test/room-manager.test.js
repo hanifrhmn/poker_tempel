@@ -8,6 +8,7 @@ import {
   detectCombination,
   isLegalFinalPlay,
   parseCard,
+  playCards,
   sortHand,
 } from '@poker-tempel/shared';
 import { chooseBotMove } from '../src/bot.js';
@@ -275,6 +276,53 @@ test('a lead with only a 2 triggers a self bomb and resets the round', (t) => {
   assert.ok(events.some((event) => event.type === 'self-bomb'));
   assert.ok(room.session.currentGame.log.some((entry) => entry.type === 'self-bomb'));
   assert.equal(room.session.lastRoundResult, null);
+
+  const cards = room.session.currentGame.players.flatMap((player) => player.hand);
+  assert.equal(cards.length, 48);
+  assert.equal(cards.some((card) => card.rank === '3'), false);
+});
+
+test('a bomb battle resets the round and records the last bomber as loser', (t) => {
+  const manager = makeManager();
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  assert.equal(manager.startGame({ code, playerId: players[0].playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const oldRound = room.session.round;
+  const game = createGame({
+    players: room.session.players,
+    hands: [
+      ['2S', '3C'],
+      ['5S', '5H', '5D', '5C', '6C'],
+      ['7S', '8C'],
+      ['9S', '10S'],
+    ].map((keys) => keys.map(parseCard)),
+    startingPlayerIndex: 0,
+  });
+
+  assert.equal(playCards(game, 0, ['2S']).ok, true);
+  assert.equal(playCards(game, 1, ['5S', '5H', '5D', '5C']).ok, true);
+  assert.equal(game.turn, 2);
+
+  room.session.currentGame = game;
+  room.session.status = SESSION_STATUS.PLAYING;
+
+  const events = [];
+  manager.onEvent((_room, event) => events.push(event));
+
+  assert.equal(manager.pass({ code, playerId: players[2].playerId }).ok, true);
+  assert.equal(manager.pass({ code, playerId: players[3].playerId }).ok, true);
+  const lastPass = manager.pass({ code, playerId: players[0].playerId });
+
+  assert.equal(lastPass.ok, true);
+  assert.equal(lastPass.state.status, 'playing');
+  assert.equal(room.session.round, oldRound + 1);
+  assert.equal(room.session.players[1].bombLosses, 1);
+  assert.equal(room.session.lastRoundResult, null);
+  assert.ok(room.session.currentGame.log.some((entry) => entry.type === 'bomb-battle'));
+  assert.ok(events.some((event) => event.type === 'bomb-battle'));
 
   const cards = room.session.currentGame.players.flatMap((player) => player.hand);
   assert.equal(cards.length, 48);

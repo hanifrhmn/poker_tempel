@@ -48,7 +48,7 @@ A localized, real-time multiplayer Web Capsa Banting (Big Two) card game web app
 
 ### 2.7 Tempelan
 * **Availability:** The Tempel button is always available on a player's turn, whether they are beating the current combination or leading a fresh trick.
-* **Play:** The player chooses a **main hand** (any valid combination, played under normal rules) and attaches **exactly one additional hand** from their hand (any valid combination, any rank or type — e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`). Bombs cannot be used as the attached hand.
+* **Play:** The player chooses a **main hand** (any valid combination, played under normal rules) and attaches **exactly one additional hand** from their hand (any valid combination, any rank or type — e.g. `Q + K`, `Q + pair of 4s`, `Q + polo`). Bombs cannot be used in a Tempelan at all (neither the main hand nor the attached hand).
 * **Vote:** The other players still in the game (finished players cannot vote) get Yes/No buttons. If every voter says yes, the tempelan is accepted; if any voter says no, it is rejected. Timeout counts as a rejection.
 * **Accepted:** Both hands stay played, and the **attached hand becomes the active combination** the next player must beat (e.g. `Q + 4` → next player only needs to beat the `4`; `Q + pair of 4s` → next player must beat the pair of `4s`).
 * **Rejected:** Only the attached hand returns to the player's hand. The **main hand stays on the board** as the active combination, and the next player must beat it.
@@ -58,7 +58,7 @@ A localized, real-time multiplayer Web Capsa Banting (Big Two) card game web app
 * **No finishing on a 2 ("poker"):** A player cannot empty their hand with a final play that uses 2s as high cards — single 2, pair of 2s, triple 2s, four-of-a-kind 2s, a Polo with triple 2s (or a pair of 2s), or any other final combination containing a non-sequence 2. This is treated as bombing yourself.
 * **Sequence exception:** A 2 used as the low card of a valid sequence is allowed in the final play: Seri `2-3-4`, Straight Flush `2-3-4-5-6`, and Polo Seri whose 3-card straight component is `2-3-4`. If the free pair of a Polo Seri contains 2s, those 2s are not a sequence use and the final play is not allowed.
 * **Self bomb:** If a player is left with only a single 2 and must lead (no legal finishing play), it is a **self bomb**: the 2 is revealed, an explosion effect plays, the current round is aborted without scoring, and a new round starts with the 3-discard opening (everyone discards their 3s; the 3♠ holder leads). If the player can pass because an active play exists, they may pass; the self bomb triggers when they are forced to lead.
-* **Bomb reset:** If any bomb (Four of a Kind or Straight Flush, including a bomb used as the main hand in a Tempelan) was played during a round, the next round also starts with the 3-discard opening (everyone discards their 3s; the 3♠ holder leads) instead of the previous winner leading.
+* **Bomb battle:** When a bomb is played, the round does not end immediately. The turn passes to the next active player, who may play a higher bomb of the same class or pass. The chain continues until every other active player has passed (or no other active players remain). The **last player to play a bomb loses**; the current round is aborted without scoring and a new round starts immediately with the 3-discard opening (everyone discards their 3s; the 3♠ holder leads).
 
 ---
 

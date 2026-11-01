@@ -41,6 +41,22 @@ function maybeResetTrick(state) {
 
   if (!allOthersPassed) return;
 
+  if (isBomb(state.activePlay.combination)) {
+    state.status = 'bomb-end';
+    state.turn = null;
+    state.bombBattle = state.bombBattle ?? { bombs: [], loser: null };
+    state.bombBattle.loser = owner;
+
+    addLog(state, {
+      type: 'bomb-battle-end',
+      playerIndex: owner,
+      loser: owner,
+      bombs: state.bombBattle.bombs,
+      message: `${state.players[owner].name} lost the bomb battle`,
+    });
+    return;
+  }
+
   const leader = state.players[owner].finished ? nextActiveIndex(state, owner) : owner;
 
   state.activePlay = null;
@@ -73,6 +89,16 @@ function summarizeCombination(combination) {
 function settlePlay(state, playerIndex, combination, logEntry, activeExtra = null) {
   state.activePlay = { playerIndex, combination, ...(activeExtra ?? {}) };
   state.passedThisTrick.clear();
+
+  if (isBomb(combination)) {
+    if (!state.bombBattle) state.bombBattle = { bombs: [], loser: null };
+    state.bombBattle.bombs.push({
+      playerIndex,
+      cards: combination.cards.map(cardKey),
+      combinationType: combination.type,
+    });
+  }
+
   addLog(state, logEntry);
 
   const player = state.players[playerIndex];
@@ -92,6 +118,26 @@ function settlePlay(state, playerIndex, combination, logEntry, activeExtra = nul
   }
 
   if (activeIndexes(state).length === 0) {
+    if (isBomb(combination)) {
+      state.status = 'bomb-end';
+      state.turn = null;
+      state.bombBattle.loser = playerIndex;
+      addLog(state, {
+        type: 'bomb-battle-end',
+        playerIndex,
+        loser: playerIndex,
+        bombs: state.bombBattle.bombs,
+        message: `${player.name} lost the bomb battle`,
+      });
+      return {
+        finished: finishedNow,
+        placement: player.placement,
+        gameOver: true,
+        bombEnd: true,
+        loser: playerIndex,
+      };
+    }
+
     state.status = 'finished';
     state.turn = null;
     addLog(state, { type: 'game-over', message: 'Game over' });
@@ -104,7 +150,9 @@ function settlePlay(state, playerIndex, combination, logEntry, activeExtra = nul
   return {
     finished: finishedNow,
     placement: player.placement,
-    gameOver: state.status === 'finished',
+    gameOver: state.status === 'finished' || state.status === 'bomb-end',
+    bombEnd: state.status === 'bomb-end',
+    loser: state.bombBattle?.loser ?? null,
   };
 }
 
@@ -151,6 +199,7 @@ export function createGame({ players, hands, startingPlayerIndex = 0, rng = Math
     activePlay: null,
     passedThisTrick: new Set(),
     pendingTempelan: null,
+    bombBattle: null,
     bombPlayed: false,
     placements: [],
     status: 'playing',
@@ -230,6 +279,16 @@ export function passTurn(state, playerIndex) {
 
   maybeResetTrick(state);
 
+  if (state.status === 'bomb-end') {
+    return {
+      ok: true,
+      trickReset: false,
+      bombEnd: true,
+      loser: state.bombBattle?.loser ?? null,
+      gameOver: false,
+    };
+  }
+
   if (state.activePlay) {
     state.turn = nextActiveIndex(state, playerIndex) ?? playerIndex;
   }
@@ -276,6 +335,7 @@ export function startTempelan(state, playerIndex, mainKeys, attachedKeys) {
   const attachedCombination = detectCombination(attachedCards);
   if (!attachedCombination) return fail('Tempelan hand is not a valid combination');
   if (isBomb(attachedCombination)) return fail('Bombs cannot be tempeled');
+  if (isBomb(mainCombination)) return fail('Bombs cannot be used in a tempelan');
 
   const active = state.activePlay?.combination ?? null;
   if (!canPlayCombination(mainCombination, active)) {
@@ -292,8 +352,6 @@ export function startTempelan(state, playerIndex, mainKeys, attachedKeys) {
       return fail('Cannot finish with a 2 unless it is part of a sequence');
     }
   }
-
-  if (isBomb(mainCombination)) state.bombPlayed = true;
 
   player.hand = player.hand.filter((card) => !allKeys.includes(cardKey(card)));
 

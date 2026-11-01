@@ -171,7 +171,7 @@ test('tracks finishing order and skips finished players', () => {
   );
 });
 
-test('allows a bomb on a single 2 and chains higher bombs of the same kind', () => {
+test('a bomb starts a bomb battle and the last bomber loses', () => {
   const state = game([
     ['2S', '3S'],
     ['5S', '5H', '5D', '5C'],
@@ -186,6 +186,8 @@ test('allows a bomb on a single 2 and chains higher bombs of the same kind', () 
   assert.equal(bomb.finished, true);
   assert.equal(bomb.placement, 1);
   assert.equal(state.turn, 2);
+  assert.equal(state.bombBattle.bombs.length, 1);
+  assert.equal(state.bombBattle.loser, null);
 
   const bombLog = state.log.filter((entry) => entry.type === 'play').at(-1);
   assert.equal(bombLog.isBomb, true);
@@ -201,17 +203,42 @@ test('allows a bomb on a single 2 and chains higher bombs of the same kind', () 
 
   assert.equal(passTurn(state, 2).ok, true);
   assert.equal(passTurn(state, 3).ok, true);
-  assert.equal(passTurn(state, 0).ok, true);
+  const lastPass = passTurn(state, 0);
 
-  assert.equal(state.turn, 2);
-  assert.equal(state.activePlay, null);
+  assert.equal(lastPass.ok, true);
+  assert.equal(lastPass.bombEnd, true);
+  assert.equal(lastPass.loser, 1);
+  assert.equal(state.status, 'bomb-end');
+  assert.equal(state.bombBattle.loser, 1);
+  assert.equal(state.turn, null);
+  assert.ok(state.log.some((entry) => entry.type === 'bomb-battle-end'));
+  assert.equal(playCards(state, 2, ['7S']).error, 'Game is not in progress');
+});
 
-  assert.equal(playCards(state, 2, ['7S']).ok, true);
-  assert.equal(playCards(state, 3, ['8S']).ok, true);
+test('a higher bomb continues the battle and becomes the loser', () => {
+  const state = game([
+    ['2S', '3C'],
+    ['5S', '5H', '5D', '5C', '6C'],
+    ['7S', '7H', '7D', '7C', '8C'],
+    ['9S', '10S'],
+  ]);
+
+  assert.equal(playCards(state, 0, ['2S']).ok, true);
+  assert.equal(playCards(state, 1, ['5S', '5H', '5D', '5C']).ok, true);
+  assert.equal(playCards(state, 2, ['7S', '7H', '7D', '7C']).ok, true);
+
+  assert.equal(passTurn(state, 3).ok, true);
   assert.equal(passTurn(state, 0).ok, true);
-  assert.equal(playCards(state, 0, ['3S']).ok, true);
-  assert.equal(state.status, 'finished');
-  assert.deepEqual(state.placements, [1, 2, 3, 0]);
+  const lastPass = passTurn(state, 1);
+
+  assert.equal(lastPass.bombEnd, true);
+  assert.equal(lastPass.loser, 2);
+  assert.equal(state.status, 'bomb-end');
+  assert.equal(state.bombBattle.bombs.length, 2);
+  assert.deepEqual(
+    state.bombBattle.bombs.map((entry) => entry.playerIndex),
+    [1, 2],
+  );
 });
 
 test('rejects leading with a bomb', () => {
@@ -312,7 +339,7 @@ test('validates tempelan main and attached hands', () => {
   ]);
   assert.equal(
     startTempelan(bombLead, 0, ['5S', '5H', '5D', '5C'], ['QS']).error,
-    'Bombs cannot be led',
+    'Bombs cannot be used in a tempelan',
   );
 
   const cannotBeat = game([
@@ -454,7 +481,7 @@ test('finished players cannot vote on a tempelan', () => {
   assert.deepEqual(state.players[1].hand.map(cardKey), ['6D']);
 });
 
-test('a tempelan can use a bomb as the main hand on a single 2', () => {
+test('bombs cannot be used as a tempelan main hand', () => {
   const state = game([
     ['2S', '3C'],
     ['5S', '5H', '5D', '5C', '6D'],
@@ -465,22 +492,10 @@ test('a tempelan can use a bomb as the main hand on a single 2', () => {
   assert.equal(playCards(state, 0, ['2S']).ok, true);
   assert.equal(state.activePlay.combination.primaryRank, '2');
 
-  const started = startTempelan(state, 1, ['5S', '5H', '5D', '5C'], ['6D']);
-
-  assert.equal(started.ok, true);
-  assert.equal(state.pendingTempelan.main.combination.type, 'fourOfAKind');
-  assert.equal(state.bombPlayed, true);
-  assert.deepEqual(state.pendingTempelan.voters, [0, 2, 3]);
-
-  assert.equal(submitTempelanVote(state, 0, true).resolved, false);
-  assert.equal(submitTempelanVote(state, 2, true).resolved, false);
-  const resolved = submitTempelanVote(state, 3, true);
-
-  assert.equal(resolved.accepted, true);
-  assert.equal(state.players[1].finished, true);
-  assert.equal(state.players[1].placement, 1);
-  assert.equal(state.activePlay.combination.primaryRank, '6');
-  assert.equal(state.turn, 2);
+  assert.equal(
+    startTempelan(state, 1, ['5S', '5H', '5D', '5C'], ['6D']).error,
+    'Bombs cannot be used in a tempelan',
+  );
 });
 
 test('cannot finish with a 2 unless it is part of a sequence', () => {
