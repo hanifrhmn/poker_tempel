@@ -1,6 +1,7 @@
 export * from './cards.js';
 export * from './combinations.js';
 export * from './game.js';
+export * from './session.js';
 
 export const GAME_NAME = 'Poker Tempel';
 export const MAX_PLAYERS = 4;

@@ -8,7 +8,7 @@ Last updated: 2026-11-02
 | :---: | :--- | :--- |
 | 0 | Project Setup & Scaffolding | Done |
 | 1 | Core Game Engine | Done |
-| 2 | Session Flow & Opening Rules | Not started |
+| 2 | Session Flow & Opening Rules | Done |
 | 3 | Multiplayer Server | Not started |
 | 4 | Frontend UI | Not started |
 | 5 | Tempelan | Not started |
@@ -68,6 +68,29 @@ Rule interpretations (documented decisions):
 - **Trick reset** happens when every other active player has passed (3 passes with 4 players, fewer once players finish), preventing deadlocks in endgame.
 - If the last player to play has already finished, the lead passes to the next active player.
 - Placements are assigned as hands empty; the game runs until all four players finish (last player plays out their remaining cards).
+
+## Phase 2 — Session Flow & Opening Rules
+
+Status: **Done**
+
+Built in `shared/src/session.js`:
+- Session state machine: `lobby → dealing → playing → round-end → game-end`
+- `createSession` — 4 players, optional `maxRounds`, configurable `scoreTable`
+- Round 1 opening: deal 13 each, **every player discards all their 3s**, the **3♠ holder leads** and can play any legal combo; an `opening-threes` log entry records each player's discarded cards and the leader
+- Later rounds: fresh 52-card deal, **previous round's 1st-place player leads**, no 3-discarding
+- `play`/`pass` wrappers delegate to the engine and auto-complete the round when all players finish
+- Round results: finish order, per-player score, wins, and placement history; `lastRoundResult`
+- `maxRounds` auto-ends the session; `endSession` lets the host end from lobby/round-end (not mid-round)
+- `getStandings` sorts by score, then wins, then seat
+
+Verified:
+- `npm test` → 37/37 passing (8 new session tests)
+- Scripted full sessions run end-to-end without UI: single-card strategy completes round 1, transitions to round 2 with the winner leading, and accumulates scores correctly
+
+Decisions:
+- Opening "give out all 3s" interpreted as **discard all rank-3 cards before the first trick** (known Capsa variant), leaving 48 cards in play for round 1
+- Scoring table is a placeholder (PRD defines no points): 1st = 3, 2nd = 2, 3rd = 1, 4th = 0; overridable via `scoreTable`
+- Session logic lives in `shared/` so the Phase 3 server remains authoritative and can reuse it directly
 
 ## Rule revisions
 
