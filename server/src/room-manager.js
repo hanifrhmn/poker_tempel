@@ -1,19 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import {
   SESSION_STATUS,
-  canPlayCombination,
   cardKey,
+  castTempelanVote as castTempelanVoteSession,
   createSession,
-  detectCombination,
   endSession as endSessionEngine,
   getStandings,
   pass as passSession,
   play as playSession,
+  playTempelan as playTempelanSession,
+  resolveTempelanVote as resolveTempelanVoteSession,
   sortHand,
   startNextRound,
   startSession,
 } from '@poker-tempel/shared';
-import { chooseBotMove } from './bot.js';
+import { chooseBotMove, chooseBotVote } from './bot.js';
 
 const ROOM_CODE_LENGTH = 5;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -49,6 +50,8 @@ export function createRoomManager(options = {}) {
     turnTimeoutMs: 30_000,
     disconnectGraceMs: 15_000,
     botDelayMs: 800,
+    tempelVoteTimeoutMs: 15_000,
+    botVoteDelayMs: 700,
     ...options,
   };
 
@@ -106,8 +109,17 @@ export function createRoomManager(options = {}) {
     room.botTimer = null;
   }
 
+  function clearTempelTimers(room) {
+    if (room.tempelTimer) clearTimeout(room.tempelTimer);
+    if (room.botVoteTimer) clearTimeout(room.botVoteTimer);
+    room.tempelTimer = null;
+    room.botVoteTimer = null;
+    room.tempelDeadline = null;
+  }
+
   function clearRoomTimers(room) {
     clearActionTimers(room);
+    clearTempelTimers(room);
     for (const slot of room.slots) {
       if (slot?.disconnectTimer) clearTimeout(slot.disconnectTimer);
       if (slot) slot.disconnectTimer = null;
@@ -127,16 +139,97 @@ export function createRoomManager(options = {}) {
     if (!hasHumanOwner) deleteRoom(room);
   }
 
+  function armTempelVote(room) {
+    if (room.tempelTimer) return;
+
+    const deadline = Date.now() + config.tempelVoteTimeoutMs;
+    room.tempelDeadline = deadline;
+    room.tempelTimer = setTimeout(() => {
+      if (room.tempelDeadline !== deadline) return;
+      onTempelTimeout(room.code);
+    }, config.tempelVoteTimeoutMs);
+  }
+
+  function scheduleBotVotes(room) {
+    if (room.botVoteTimer) return;
+
+    const pending = room.session?.currentGame?.pendingTempelan;
+    if (!pending) return;
+
+    const hasBot = pending.voters.some(
+      (seat) => room.slots[seat]?.isBot && !pending.votes.has(seat),
+    );
+    if (!hasBot) return;
+
+    room.botVoteTimer = setTimeout(() => {
+      room.botVoteTimer = null;
+      castBotVotes(room.code);
+    }, config.botVoteDelayMs);
+  }
+
+  function castBotVotes(code) {
+    const room = rooms.get(code);
+    if (!room?.session) return;
+
+    const game = room.session.currentGame;
+    if (!game.pendingTempelan) return;
+
+    const logStart = game.log.length;
+
+    for (const seat of [...game.pendingTempelan.voters]) {
+      if (!room.slots[seat]?.isBot) continue;
+      if (game.pendingTempelan.votes.has(seat)) continue;
+
+      const vote = chooseBotVote(game, seat);
+      if (vote === null) continue;
+
+      const result = castTempelanVoteSession(room.session, seat, vote);
+      if (!result.ok) continue;
+      if (result.resolved) break;
+    }
+
+    const events = game.log.slice(logStart);
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+  }
+
+  function onTempelTimeout(code) {
+    const room = rooms.get(code);
+    if (!room?.session?.currentGame.pendingTempelan) return;
+
+    const game = room.session.currentGame;
+    const logStart = game.log.length;
+    const result = resolveTempelanVoteSession(room.session, false);
+    if (!result.ok) return;
+
+    const events = game.log.slice(logStart);
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+  }
+
   function syncTimers(room) {
     clearActionTimers(room);
 
     const session = room.session;
     if (!session || session.status !== SESSION_STATUS.PLAYING) {
       room.turnDeadline = null;
+      clearTempelTimers(room);
       return;
     }
 
-    const seat = session.currentGame.turn;
+    const game = session.currentGame;
+    if (game.pendingTempelan) {
+      room.turnDeadline = null;
+      armTempelVote(room);
+      scheduleBotVotes(room);
+      return;
+    }
+
+    clearTempelTimers(room);
+
+    const seat = game.turn;
     const deadline = Date.now() + config.turnTimeoutMs;
     room.turnDeadline = deadline;
     room.turnTimer = setTimeout(() => {
@@ -230,6 +323,7 @@ export function createRoomManager(options = {}) {
       yourSeat: viewerSeat,
       version: room.version,
       turnTimeoutMs: config.turnTimeoutMs,
+      tempelVoteTimeoutMs: config.tempelVoteTimeoutMs,
     };
 
     if (!room.session) {
@@ -238,6 +332,7 @@ export function createRoomManager(options = {}) {
 
     const session = room.session;
     const game = session.currentGame;
+    const pending = game.pendingTempelan;
     const players = game.players.map((player, seat) => {
       const slot = room.slots[seat];
       const stats = session.players[seat];
@@ -264,6 +359,16 @@ export function createRoomManager(options = {}) {
       turnDeadline: room.turnDeadline,
       activePlay: game.activePlay,
       passedSeats: [...game.passedThisTrick],
+      pendingTempelan: pending
+        ? {
+            playerIndex: pending.playerIndex,
+            main: pending.main,
+            attached: pending.attached,
+            voters: [...pending.voters],
+            votes: Object.fromEntries(pending.votes),
+          }
+        : null,
+      tempelDeadline: room.tempelDeadline,
       placements: [...game.placements],
       players,
       log: game.log.slice(-MAX_LOG_ENTRIES),
@@ -306,6 +411,9 @@ export function createRoomManager(options = {}) {
       turnDeadline: null,
       turnTimer: null,
       botTimer: null,
+      tempelDeadline: null,
+      tempelTimer: null,
+      botVoteTimer: null,
       version: 0,
     };
 
@@ -472,6 +580,55 @@ export function createRoomManager(options = {}) {
     return { ...result, state: getStateFor(room, playerId) };
   }
 
+  function playTempelan({ code, playerId, mainCards, attachedCards } = {}) {
+    const room = getRoomByCode(code);
+    if (!room) return fail('Room not found');
+
+    const seat = seatOf(room, playerId);
+    if (seat === -1) return fail('You are not in this room');
+    if (!room.slots[seat].connected) return fail('You are disconnected');
+    if (!room.session) return fail('Game has not started');
+    if (room.session.status !== SESSION_STATUS.PLAYING) return fail('Round is not in progress');
+
+    const game = room.session.currentGame;
+    const logStart = game.log.length;
+    const result = playTempelanSession(room.session, seat, mainCards, attachedCards);
+    if (!result.ok) return result;
+
+    const events = game.log.slice(logStart);
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+
+    return { ...result, state: getStateFor(room, playerId) };
+  }
+
+  function castTempelanVote({ code, playerId, vote } = {}) {
+    const room = getRoomByCode(code);
+    if (!room) return fail('Room not found');
+
+    const seat = seatOf(room, playerId);
+    if (seat === -1) return fail('You are not in this room');
+    if (!room.slots[seat].connected) return fail('You are disconnected');
+    if (!room.session) return fail('Game has not started');
+    if (room.session.status !== SESSION_STATUS.PLAYING) return fail('Round is not in progress');
+    if (typeof vote !== 'boolean') return fail('Vote must be yes or no');
+
+    const game = room.session.currentGame;
+    if (!game.pendingTempelan) return fail('No tempelan vote in progress');
+
+    const logStart = game.log.length;
+    const result = castTempelanVoteSession(room.session, seat, vote);
+    if (!result.ok) return result;
+
+    const events = game.log.slice(logStart);
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+
+    return { ...result, state: getStateFor(room, playerId) };
+  }
+
   function nextRound({ code, playerId } = {}) {
     const room = getRoomByCode(code);
     if (!room) return fail('Room not found');
@@ -591,6 +748,8 @@ export function createRoomManager(options = {}) {
     startGame,
     play,
     pass,
+    playTempelan,
+    castTempelanVote,
     nextRound,
     endSession,
     leaveRoom,

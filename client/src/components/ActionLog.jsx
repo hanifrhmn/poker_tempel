@@ -23,6 +23,21 @@ function describe(entry, players) {
       return `${name} leads the next trick`;
     case 'finish':
       return `${name} finished ${ordinal(entry.placement)}`;
+    case 'tempelan-play': {
+      const main = (entry.mainCards ?? [])
+        .map((key) => cardLabel(parseCard(key)))
+        .join(' ');
+      const attached = (entry.attachedCards ?? [])
+        .map((key) => cardLabel(parseCard(key)))
+        .join(' ');
+      return `${name} tempeled ${COMBINATION_LABELS[entry.attachedType] ?? entry.attachedType} ${attached} on ${COMBINATION_LABELS[entry.mainType] ?? entry.mainType} ${main}`;
+    }
+    case 'tempelan-vote':
+      return `${name} voted ${entry.vote}`;
+    case 'tempelan-accepted':
+      return `${name}'s tempelan was accepted`;
+    case 'tempelan-rejected':
+      return `${name}'s tempelan was rejected`;
     case 'game-over':
       return 'Game over';
     case 'game-start':

@@ -5,12 +5,15 @@ import {
   SESSION_STATUS,
   canPlayCombination,
   cardKey,
+  createGame,
   createSession,
   detectCombination,
   endSession,
   getStandings,
+  parseCard,
   pass,
   play,
+  playTempelan,
   sortHand,
   startNextRound,
   startSession,
@@ -232,4 +235,40 @@ test('standings rank players by points then wins', () => {
   for (let index = 1; index < standings.length; index += 1) {
     assert.ok(standings[index - 1].score >= standings[index].score);
   }
+});
+
+test('playTempelan completes the round when the last player finishes', () => {
+  const session = createSession({ players });
+  session.status = SESSION_STATUS.PLAYING;
+  session.round = 1;
+
+  const game = createGame({
+    players,
+    hands: [
+      ['QS', '4H'],
+      ['5S'],
+      ['6S'],
+      ['7S'],
+    ].map((keys) => keys.map(parseCard)),
+    startingPlayerIndex: 0,
+  });
+
+  game.players[1].finished = true;
+  game.players[1].placement = 1;
+  game.players[2].finished = true;
+  game.players[2].placement = 2;
+  game.players[3].finished = true;
+  game.players[3].placement = 3;
+  game.placements = [1, 2, 3];
+  session.currentGame = game;
+
+  const result = playTempelan(session, 0, ['QS'], ['4H']);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.resolved, true);
+  assert.equal(result.roundOver, true);
+  assert.equal(session.status, SESSION_STATUS.ROUND_END);
+  assert.deepEqual(session.lastRoundResult.placements, [1, 2, 3, 0]);
+  assert.equal(session.players[0].placements[0], 4);
+  assert.equal(session.players[0].score, DEFAULT_SCORE_TABLE[4]);
 });

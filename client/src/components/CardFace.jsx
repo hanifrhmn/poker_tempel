@@ -12,6 +12,7 @@ const SUIT_SIZE = { sm: 'text-lg', md: 'text-2xl', lg: 'text-4xl' };
 export default function CardFace({
   card,
   selected = false,
+  highlight = 'amber',
   onClick,
   disabled = false,
   size = 'md',
@@ -21,13 +22,14 @@ export default function CardFace({
   const color = red ? 'text-red-600' : 'text-slate-900';
   const interactive = Boolean(onClick) && !disabled;
   const hover = interactive && !selected ? 'hover:-translate-y-2 hover:z-10' : '';
+  const ring = highlight === 'sky' ? 'ring-sky-400' : 'ring-amber-400';
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!interactive}
-      className={`group relative shrink-0 bg-white shadow-lg shadow-black/30 transition-transform duration-150 ${SIZES[size]} ${interactive ? 'cursor-pointer' : 'cursor-default'} ${hover} ${selected ? '-translate-y-4 z-10 ring-2 ring-amber-400' : ''} ${className}`}
+      className={`group relative shrink-0 bg-white shadow-lg shadow-black/30 transition-transform duration-150 ${SIZES[size]} ${interactive ? 'cursor-pointer' : 'cursor-default'} ${hover} ${selected ? `-translate-y-4 z-10 ring-2 ${ring}` : ''} ${className}`}
     >
       <span className={`absolute left-1.5 top-1 font-black leading-none ${RANK_SIZE[size]} ${color}`}>
         {card.rank}

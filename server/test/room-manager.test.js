@@ -11,6 +11,15 @@ import { createRoomManager } from '../src/room-manager.js';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function waitFor(predicate, timeoutMs = 2000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) return true;
+    await delay(20);
+  }
+  return false;
+}
+
 function makeManager(options = {}) {
   return createRoomManager({
     turnTimeoutMs: 60_000,
@@ -378,4 +387,196 @@ test('emits effect-ready game events', (t) => {
   assert.equal(playEvent.beaten, null);
   assert.equal(typeof playEvent.at, 'number');
   assert.ok(Array.isArray(playEvent.cards));
+});
+
+test('tempelan pauses the turn timer and resolves when all voters accept', (t) => {
+  const manager = makeManager();
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  assert.equal(manager.startGame({ code, playerId: players[0].playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const seat = room.session.currentGame.turn;
+  const actor = players.find((player) => player.seat === seat);
+  const hand = sortHand(room.session.currentGame.players[seat].hand);
+  const main = cardKey(hand[0]);
+  const attached = cardKey(hand[1]);
+
+  const started = manager.playTempelan({
+    code,
+    playerId: actor.playerId,
+    mainCards: [main],
+    attachedCards: [attached],
+  });
+
+  assert.equal(started.ok, true);
+  assert.equal(started.resolved, false);
+  assert.equal(started.state.turnDeadline, null);
+  assert.equal(typeof started.state.tempelDeadline, 'number');
+  assert.equal(started.state.pendingTempelan.playerIndex, seat);
+  assert.equal(started.state.pendingTempelan.voters.length, 3);
+
+  const remaining = room.session.currentGame.players[seat].hand.map(cardKey);
+  assert.equal(
+    manager.play({ code, playerId: actor.playerId, cards: [remaining[0]] }).error,
+    'A tempelan vote is in progress',
+  );
+  assert.equal(
+    manager.castTempelanVote({ code, playerId: actor.playerId, vote: true }).error,
+    'You cannot vote on this tempelan',
+  );
+
+  let result = null;
+  for (const voterSeat of started.state.pendingTempelan.voters) {
+    const voter = players.find((player) => player.seat === voterSeat);
+    result = manager.castTempelanVote({ code, playerId: voter.playerId, vote: true });
+    assert.equal(result.ok, true);
+  }
+
+  assert.equal(result.resolved, true);
+  assert.equal(result.accepted, true);
+  assert.equal(room.session.currentGame.pendingTempelan, null);
+  assert.equal(room.tempelDeadline, null);
+  assert.ok(room.turnDeadline > Date.now());
+  assert.equal(cardKey(room.session.currentGame.activePlay.combination.cards[0]), attached);
+});
+
+test('a tempelan no vote rejects and returns the attached hand', (t) => {
+  const manager = makeManager();
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  assert.equal(manager.startGame({ code, playerId: players[0].playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const seat = room.session.currentGame.turn;
+  const actor = players.find((player) => player.seat === seat);
+  const hand = sortHand(room.session.currentGame.players[seat].hand);
+  const main = cardKey(hand[0]);
+  const attached = cardKey(hand[1]);
+
+  const started = manager.playTempelan({
+    code,
+    playerId: actor.playerId,
+    mainCards: [main],
+    attachedCards: [attached],
+  });
+  assert.equal(started.ok, true);
+
+  const voterSeat = started.state.pendingTempelan.voters[0];
+  const voter = players.find((player) => player.seat === voterSeat);
+  const result = manager.castTempelanVote({
+    code,
+    playerId: voter.playerId,
+    vote: false,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.resolved, true);
+  assert.equal(result.accepted, false);
+  assert.equal(result.state.pendingTempelan, null);
+  assert.equal(result.state.activePlay.tempelan.accepted, false);
+  assert.equal(cardKey(result.state.activePlay.combination.cards[0]), main);
+  assert.ok(room.session.currentGame.players[seat].hand.map(cardKey).includes(attached));
+});
+
+test('tempelan vote timeout rejects the tempelan', async (t) => {
+  const manager = makeManager({ tempelVoteTimeoutMs: 40 });
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  assert.equal(manager.startGame({ code, playerId: players[0].playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const seat = room.session.currentGame.turn;
+  const actor = players.find((player) => player.seat === seat);
+  const hand = sortHand(room.session.currentGame.players[seat].hand);
+  const main = cardKey(hand[0]);
+  const attached = cardKey(hand[1]);
+
+  assert.equal(
+    manager.playTempelan({
+      code,
+      playerId: actor.playerId,
+      mainCards: [main],
+      attachedCards: [attached],
+    }).ok,
+    true,
+  );
+
+  await delay(150);
+
+  assert.equal(room.session.currentGame.pendingTempelan, null);
+  assert.equal(room.session.currentGame.activePlay.tempelan.accepted, false);
+  assert.equal(cardKey(room.session.currentGame.activePlay.combination.cards[0]), main);
+  assert.ok(room.turnDeadline > Date.now());
+});
+
+test('bots vote automatically on a tempelan', async (t) => {
+  const manager = makeManager({
+    botDelayMs: 20,
+    botVoteDelayMs: 20,
+    tempelVoteTimeoutMs: 5_000,
+  });
+  t.after(() => manager.close());
+
+  let setup = null;
+
+  for (let attempt = 0; attempt < 20 && !setup; attempt += 1) {
+    const created = manager.createRoom({ name: 'Host' });
+    const code = created.code;
+    const guest = manager.joinRoom({ code, name: 'Guest' });
+    assert.equal(manager.addBot({ code, playerId: created.playerId }).ok, true);
+    assert.equal(manager.addBot({ code, playerId: created.playerId }).ok, true);
+    assert.equal(manager.startGame({ code, playerId: created.playerId }).ok, true);
+
+    const room = manager.getRoom(code);
+    const leaderSeat = room.session.currentGame.turn;
+    const leaderSlot = room.slots[leaderSeat];
+
+    if (leaderSlot.playerId) {
+      setup = {
+        code,
+        leaderSeat,
+        leaderPlayerId: leaderSlot.playerId,
+        hostId: created.playerId,
+        guestId: guest.playerId,
+      };
+      break;
+    }
+
+    manager.leaveRoom({ code, playerId: created.playerId });
+    manager.leaveRoom({ code, playerId: guest.playerId });
+  }
+
+  assert.ok(setup);
+
+  const room = manager.getRoom(setup.code);
+  const hand = sortHand(room.session.currentGame.players[setup.leaderSeat].hand);
+  const main = cardKey(hand[hand.length - 1]);
+  const attached = cardKey(hand[0]);
+
+  const started = manager.playTempelan({
+    code: setup.code,
+    playerId: setup.leaderPlayerId,
+    mainCards: [main],
+    attachedCards: [attached],
+  });
+  assert.equal(started.ok, true);
+  assert.equal(started.resolved, false);
+
+  const humanVoterId =
+    setup.leaderPlayerId === setup.hostId ? setup.guestId : setup.hostId;
+  const humanVote = manager.castTempelanVote({
+    code: setup.code,
+    playerId: humanVoterId,
+    vote: true,
+  });
+  assert.equal(humanVote.ok, true);
+
+  const resolved = await waitFor(() => !room.session.currentGame.pendingTempelan);
+  assert.equal(resolved, true);
+  assert.equal(room.session.currentGame.activePlay.tempelan.accepted, true);
+  assert.equal(cardKey(room.session.currentGame.activePlay.combination.cards[0]), attached);
 });

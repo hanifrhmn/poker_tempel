@@ -53,6 +53,55 @@ function maybeResetTrick(state) {
   }
 }
 
+function summarizeCombination(combination) {
+  if (!combination) return null;
+  return {
+    type: combination.type,
+    cards: combination.cards.map(cardKey),
+    primaryRank: combination.primaryRank,
+    primaryValue: combination.primaryValue,
+    suit: combination.suit,
+  };
+}
+
+function settlePlay(state, playerIndex, combination, logEntry, activeExtra = null) {
+  state.activePlay = { playerIndex, combination, ...(activeExtra ?? {}) };
+  state.passedThisTrick.clear();
+  addLog(state, logEntry);
+
+  const player = state.players[playerIndex];
+  let finishedNow = false;
+
+  if (player.hand.length === 0 && !player.finished) {
+    player.finished = true;
+    player.placement = state.placements.length + 1;
+    state.placements.push(playerIndex);
+    finishedNow = true;
+    addLog(state, {
+      type: 'finish',
+      playerIndex,
+      placement: player.placement,
+      message: `${player.name} finished #${player.placement}`,
+    });
+  }
+
+  if (activeIndexes(state).length === 0) {
+    state.status = 'finished';
+    state.turn = null;
+    addLog(state, { type: 'game-over', message: 'Game over' });
+    return { finished: finishedNow, placement: player.placement, gameOver: true };
+  }
+
+  state.turn = nextActiveIndex(state, playerIndex) ?? playerIndex;
+  maybeResetTrick(state);
+
+  return {
+    finished: finishedNow,
+    placement: player.placement,
+    gameOver: state.status === 'finished',
+  };
+}
+
 export function createGame({ players, hands, startingPlayerIndex = 0, rng = Math.random } = {}) {
   if (!Array.isArray(players) || players.length !== PLAYER_COUNT) {
     throw new Error(`Poker Tempel requires exactly ${PLAYER_COUNT} players`);
@@ -95,6 +144,7 @@ export function createGame({ players, hands, startingPlayerIndex = 0, rng = Math
     turn: startingPlayerIndex,
     activePlay: null,
     passedThisTrick: new Set(),
+    pendingTempelan: null,
     placements: [],
     status: 'playing',
     log: [],
@@ -111,6 +161,7 @@ export function createGame({ players, hands, startingPlayerIndex = 0, rng = Math
 
 export function playCards(state, playerIndex, keys) {
   if (!state || state.status !== 'playing') return fail('Game is not in progress');
+  if (state.pendingTempelan) return fail('A tempelan vote is in progress');
   if (!Number.isInteger(playerIndex) || !state.players[playerIndex]) return fail('Invalid player');
   if (state.turn !== playerIndex) return fail('Not your turn');
   if (!Array.isArray(keys) || keys.length === 0) return fail('No cards selected');
@@ -136,68 +187,23 @@ export function playCards(state, playerIndex, keys) {
   }
 
   player.hand = player.hand.filter((card) => !keys.includes(cardKey(card)));
-  state.activePlay = { playerIndex, combination };
-  state.passedThisTrick.clear();
 
-  addLog(state, {
+  const settled = settlePlay(state, playerIndex, combination, {
     type: 'play',
     playerIndex,
     combinationType: combination.type,
     cards: cards.map(cardKey),
     isBomb: isBomb(combination),
-    beaten: active
-      ? {
-          type: active.type,
-          cards: active.cards.map(cardKey),
-          primaryRank: active.primaryRank,
-          primaryValue: active.primaryValue,
-          suit: active.suit,
-        }
-      : null,
+    beaten: summarizeCombination(active),
     message: `${player.name} played ${combination.type}`,
   });
 
-  let finishedNow = false;
-  if (player.hand.length === 0 && !player.finished) {
-    player.finished = true;
-    player.placement = state.placements.length + 1;
-    state.placements.push(playerIndex);
-    finishedNow = true;
-    addLog(state, {
-      type: 'finish',
-      playerIndex,
-      placement: player.placement,
-      message: `${player.name} finished #${player.placement}`,
-    });
-  }
-
-  if (activeIndexes(state).length === 0) {
-    state.status = 'finished';
-    state.turn = null;
-    addLog(state, { type: 'game-over', message: 'Game over' });
-    return {
-      ok: true,
-      combination,
-      finished: finishedNow,
-      placement: player.placement,
-      gameOver: true,
-    };
-  }
-
-  state.turn = nextActiveIndex(state, playerIndex) ?? playerIndex;
-  maybeResetTrick(state);
-
-  return {
-    ok: true,
-    combination,
-    finished: finishedNow,
-    placement: player.placement,
-    gameOver: state.status === 'finished',
-  };
+  return { ok: true, combination, ...settled };
 }
 
 export function passTurn(state, playerIndex) {
   if (!state || state.status !== 'playing') return fail('Game is not in progress');
+  if (state.pendingTempelan) return fail('A tempelan vote is in progress');
   if (!Number.isInteger(playerIndex) || !state.players[playerIndex]) return fail('Invalid player');
   if (state.turn !== playerIndex) return fail('Not your turn');
   if (!state.activePlay) return fail('You are leading; play cards');
@@ -220,5 +226,179 @@ export function passTurn(state, playerIndex) {
     ok: true,
     trickReset: !state.activePlay,
     gameOver: state.status === 'finished',
+  };
+}
+
+export function startTempelan(state, playerIndex, mainKeys, attachedKeys) {
+  if (!state || state.status !== 'playing') return fail('Game is not in progress');
+  if (state.pendingTempelan) return fail('A tempelan vote is already in progress');
+  if (!Number.isInteger(playerIndex) || !state.players[playerIndex]) return fail('Invalid player');
+  if (state.turn !== playerIndex) return fail('Not your turn');
+  if (!Array.isArray(mainKeys) || mainKeys.length === 0) return fail('Select a main hand');
+  if (!Array.isArray(attachedKeys) || attachedKeys.length === 0) {
+    return fail('Select a hand to tempel');
+  }
+
+  const allKeys = [...mainKeys, ...attachedKeys];
+  if (new Set(allKeys).size !== allKeys.length) return fail('Duplicate cards selected');
+
+  const player = state.players[playerIndex];
+  const handByKey = new Map(player.hand.map((card) => [cardKey(card), card]));
+  const mainCards = [];
+  const attachedCards = [];
+
+  for (const key of mainKeys) {
+    const card = handByKey.get(key);
+    if (!card) return fail('Card not in hand');
+    mainCards.push(card);
+  }
+  for (const key of attachedKeys) {
+    const card = handByKey.get(key);
+    if (!card) return fail('Card not in hand');
+    attachedCards.push(card);
+  }
+
+  const mainCombination = detectCombination(mainCards);
+  if (!mainCombination) return fail('Main hand is not a valid combination');
+
+  const attachedCombination = detectCombination(attachedCards);
+  if (!attachedCombination) return fail('Tempelan hand is not a valid combination');
+  if (isBomb(attachedCombination)) return fail('Bombs cannot be tempeled');
+
+  const active = state.activePlay?.combination ?? null;
+  if (!canPlayCombination(mainCombination, active)) {
+    if (!active) return fail('Bombs cannot be led');
+    return fail('Main hand does not beat the current combination');
+  }
+
+  player.hand = player.hand.filter((card) => !allKeys.includes(cardKey(card)));
+
+  const voters = activeIndexes(state).filter((seat) => seat !== playerIndex);
+
+  state.pendingTempelan = {
+    playerIndex,
+    main: { combination: mainCombination, cards: mainCards.map(cardKey) },
+    attached: { combination: attachedCombination, cards: attachedCards.map(cardKey) },
+    voters,
+    votes: new Map(),
+    beaten: summarizeCombination(active),
+  };
+
+  addLog(state, {
+    type: 'tempelan-play',
+    playerIndex,
+    mainType: mainCombination.type,
+    mainCards: mainCards.map(cardKey),
+    attachedType: attachedCombination.type,
+    attachedCards: attachedCards.map(cardKey),
+    beaten: state.pendingTempelan.beaten,
+    message: `${player.name} tempeled ${attachedCombination.type} on ${mainCombination.type}`,
+  });
+
+  if (voters.length === 0) {
+    return resolveTempelanInternal(state, true);
+  }
+
+  return {
+    ok: true,
+    resolved: false,
+    main: mainCombination,
+    attached: attachedCombination,
+    voters,
+  };
+}
+
+export function submitTempelanVote(state, voterSeat, vote) {
+  if (!state?.pendingTempelan) return fail('No tempelan vote in progress');
+
+  const pending = state.pendingTempelan;
+  if (!Number.isInteger(voterSeat) || !pending.voters.includes(voterSeat)) {
+    return fail('You cannot vote on this tempelan');
+  }
+  if (pending.votes.has(voterSeat)) return fail('You already voted');
+
+  const value = Boolean(vote);
+  pending.votes.set(voterSeat, value);
+
+  addLog(state, {
+    type: 'tempelan-vote',
+    playerIndex: voterSeat,
+    vote: value ? 'yes' : 'no',
+    message: `${state.players[voterSeat].name} voted ${value ? 'yes' : 'no'}`,
+  });
+
+  if (!value) return resolveTempelanInternal(state, false);
+
+  const allYes = pending.voters.every((seat) => pending.votes.get(seat) === true);
+  if (allYes) return resolveTempelanInternal(state, true);
+
+  return { ok: true, resolved: false };
+}
+
+export function resolvePendingTempelan(state, accepted) {
+  if (!state?.pendingTempelan) return fail('No tempelan vote in progress');
+  return resolveTempelanInternal(state, Boolean(accepted));
+}
+
+function resolveTempelanInternal(state, accepted) {
+  const pending = state.pendingTempelan;
+  const player = state.players[pending.playerIndex];
+  const target = accepted ? pending.attached : pending.main;
+
+  if (!accepted) {
+    const returned = pending.attached.cards.map(parseCard);
+    player.hand = sortHand([...player.hand, ...returned]);
+  }
+
+  state.pendingTempelan = null;
+
+  addLog(
+    state,
+    accepted
+      ? {
+          type: 'tempelan-accepted',
+          playerIndex: pending.playerIndex,
+          mainCards: pending.main.cards,
+          cards: pending.attached.cards,
+          message: `${player.name}'s tempelan was accepted`,
+        }
+      : {
+          type: 'tempelan-rejected',
+          playerIndex: pending.playerIndex,
+          returned: pending.attached.cards,
+          message: `${player.name}'s tempelan was rejected`,
+        },
+  );
+
+  const tempelan = {
+    playerIndex: pending.playerIndex,
+    main: pending.main,
+    attached: pending.attached,
+    accepted,
+  };
+
+  const settled = settlePlay(
+    state,
+    pending.playerIndex,
+    target.combination,
+    {
+      type: 'play',
+      playerIndex: pending.playerIndex,
+      combinationType: target.combination.type,
+      cards: target.cards,
+      isBomb: isBomb(target.combination),
+      beaten: pending.beaten,
+      tempelan,
+      message: `${player.name} played ${target.combination.type}`,
+    },
+    { tempelan },
+  );
+
+  return {
+    ok: true,
+    resolved: true,
+    accepted,
+    combination: target.combination,
+    ...settled,
   };
 }

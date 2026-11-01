@@ -23,3 +23,11 @@ export function chooseBotMove(game, seat) {
 
   return { type: 'pass' };
 }
+
+export function chooseBotVote(game, voterSeat) {
+  const pending = game.pendingTempelan;
+  if (!pending) return true;
+  if (pending.votes?.has(voterSeat)) return null;
+
+  return pending.attached.combination.primaryValue <= pending.main.combination.primaryValue;
+}

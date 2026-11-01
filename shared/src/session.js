@@ -1,5 +1,13 @@
 import { cardKey, createDeck, deal, shuffle } from './cards.js';
-import { PLAYER_COUNT, createGame, passTurn, playCards } from './game.js';
+import {
+  PLAYER_COUNT,
+  createGame,
+  passTurn,
+  playCards,
+  resolvePendingTempelan,
+  startTempelan,
+  submitTempelanVote,
+} from './game.js';
 
 export const SESSION_STATUS = Object.freeze({
   LOBBY: 'lobby',
@@ -160,6 +168,48 @@ export function pass(session, playerIndex) {
   }
 
   const result = passTurn(session.currentGame, playerIndex);
+  if (result.ok && session.currentGame.status === 'finished') {
+    completeRound(session);
+    result.roundOver = true;
+  }
+  result.sessionStatus = session.status;
+  return result;
+}
+
+export function playTempelan(session, playerIndex, mainCards, attachedCards) {
+  if (session.status !== SESSION_STATUS.PLAYING) {
+    return fail('Round is not in progress');
+  }
+
+  const result = startTempelan(session.currentGame, playerIndex, mainCards, attachedCards);
+  if (result.ok && session.currentGame.status === 'finished') {
+    completeRound(session);
+    result.roundOver = true;
+  }
+  result.sessionStatus = session.status;
+  return result;
+}
+
+export function castTempelanVote(session, voterSeat, vote) {
+  if (session.status !== SESSION_STATUS.PLAYING) {
+    return fail('Round is not in progress');
+  }
+
+  const result = submitTempelanVote(session.currentGame, voterSeat, vote);
+  if (result.ok && session.currentGame.status === 'finished') {
+    completeRound(session);
+    result.roundOver = true;
+  }
+  result.sessionStatus = session.status;
+  return result;
+}
+
+export function resolveTempelanVote(session, accepted = false) {
+  if (session.status !== SESSION_STATUS.PLAYING) {
+    return fail('Round is not in progress');
+  }
+
+  const result = resolvePendingTempelan(session.currentGame, accepted);
   if (result.ok && session.currentGame.status === 'finished') {
     completeRound(session);
     result.roundOver = true;

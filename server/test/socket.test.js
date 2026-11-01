@@ -289,3 +289,71 @@ test('four socket clients can play a full round and advance to round 2', async (
   assert.equal(next.state.round, 2);
   assert.equal(next.state.turn, finalState.lastRoundResult.placements[0]);
 });
+
+test('socket clients can play a tempelan and vote on it', async (t) => {
+  const { server, url } = await startServer({
+    turnTimeoutMs: 60_000,
+    tempelVoteTimeoutMs: 60_000,
+    disconnectGraceMs: 1_000,
+    botDelayMs: 60_000,
+    botVoteDelayMs: 60_000,
+  });
+  const clients = [];
+
+  t.after(async () => {
+    for (const client of clients) client.disconnect();
+    await server.close();
+  });
+
+  const names = ['Alice', 'Bob', 'Carol', 'Dave'];
+  for (const name of names) {
+    clients.push(await connectClient(url));
+  }
+
+  const created = await emitAck(clients[0], 'room:create', { name: names[0] });
+  const code = created.code;
+
+  for (let index = 1; index < clients.length; index += 1) {
+    const joined = await emitAck(clients[index], 'room:join', {
+      code,
+      name: names[index],
+    });
+    assert.equal(joined.ok, true);
+  }
+
+  const playingStates = clients.map((client) =>
+    waitForState(client, (state) => state.status === 'playing'),
+  );
+  assert.equal((await emitAck(clients[0], 'room:start')).ok, true);
+  const states = await Promise.all(playingStates);
+
+  const turnSeat = states[0].turn;
+  const actor = clients[turnSeat];
+  const actorState = states[turnSeat];
+  const hand = sortHand(actorState.you.hand);
+  const main = cardKey(hand[0]);
+  const attached = cardKey(hand[1]);
+
+  const started = await emitAck(actor, 'game:tempelan', {
+    mainCards: [main],
+    attachedCards: [attached],
+  });
+
+  assert.equal(started.ok, true);
+  assert.equal(started.state.pendingTempelan.playerIndex, turnSeat);
+  assert.equal(started.state.pendingTempelan.voters.length, 3);
+
+  let final = null;
+  for (const voterSeat of started.state.pendingTempelan.voters) {
+    const result = await emitAck(clients[voterSeat], 'game:tempelanVote', {
+      vote: true,
+    });
+    assert.equal(result.ok, true);
+    final = result;
+  }
+
+  assert.equal(final.resolved, true);
+  assert.equal(final.accepted, true);
+  assert.equal(final.state.pendingTempelan, null);
+  assert.equal(cardKey(final.state.activePlay.combination.cards[0]), attached);
+});

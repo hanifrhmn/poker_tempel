@@ -143,6 +143,29 @@ export function createPokerServer(options = {}) {
       roomAction(() => manager.pass({ code: socket.data.code, playerId: socket.data.playerId })),
     );
 
+    socket.on(
+      'game:tempelan',
+      roomAction((payload) =>
+        manager.playTempelan({
+          code: socket.data.code,
+          playerId: socket.data.playerId,
+          mainCards: payload.mainCards,
+          attachedCards: payload.attachedCards,
+        }),
+      ),
+    );
+
+    socket.on(
+      'game:tempelanVote',
+      roomAction((payload) =>
+        manager.castTempelanVote({
+          code: socket.data.code,
+          playerId: socket.data.playerId,
+          vote: payload.vote,
+        }),
+      ),
+    );
+
     socket.on('room:leave', (payload = {}, callback) => {
       if (!socket.data?.code || !socket.data?.playerId) {
         reply(callback, { ok: false, error: 'Not in a room' });

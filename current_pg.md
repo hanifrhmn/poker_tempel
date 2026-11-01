@@ -11,7 +11,7 @@ Last updated: 2026-11-02
 | 2 | Session Flow & Opening Rules | Done |
 | 3 | Multiplayer Server | Done |
 | 4 | Frontend UI | Done |
-| 5 | Tempelan | Not started |
+| 5 | Tempelan | Done |
 | 6 | Bots (AI) | Not started |
 | 7 | Polish & LAN Testing | Not started |
 
@@ -168,11 +168,50 @@ Decisions:
 - No separate "ready" toggle — all connected players are considered ready and the host starts once seats are filled
 - Effects/sounds still deferred to Phase 7; the client already receives `game:event` payloads needed for them
 
+## Phase 5 — Tempelan
+
+Status: **Done**
+
+Engine (`shared/src/game.js`):
+- `startTempelan` — validates turn, main play, attached combo, and rejects attached bombs; main can be any legal combo (including a bomb on a single 2), leading or responding; both hands leave the hand immediately and a pending vote is stored
+- Voters are the active players except the tempeler; finished players never vote
+- `submitTempelanVote` — records votes; the first **no** rejects immediately, all **yes** accepts; `resolvePendingTempelan` handles forced rejection (timeout)
+- Accepted → attached hand becomes the active combo; rejected → only the attached hand returns to hand and the main stays active
+- Placement/finish only resolves on acceptance when the hand empties
+- Emits `tempelan-play`, `tempelan-vote`, `tempelan-accepted`, `tempelan-rejected`, then a normal `play` event; active play carries `tempelan` metadata (`main`, `attached`, `accepted`)
+- `playCards` / `passTurn` are blocked while a vote is pending
+- Session wrappers (`playTempelan`, `castTempelanVote`, `resolveTempelanVote`) complete the round if resolution ends the game
+
+Server (`server/src/`):
+- Room actions `playTempelan` / `castTempelanVote`; socket events `game:tempelan` and `game:tempelanVote`
+- 15s vote window (`tempelVoteTimeoutMs`); timeout rejects; the turn timer is paused during the vote and restarts after resolution
+- Bots vote after a short delay via `chooseBotVote`: accept when the attached primary rank is ≤ the main primary rank, reject when higher (Q+4 passes, Q+K usually fails)
+- `room:state` now exposes `pendingTempelan` (main/attached/voters/votes), `tempelDeadline`, and `tempelVoteTimeoutMs`
+- Disconnect takeover adds newly bot-controlled voters to a pending vote
+
+Client (`client/src/`):
+- Tempel flow: select a legal main hand → **Tempel** → main cards lock with a sky ring → select exactly one attached hand → **Play tempelan**
+- Tempel button is always visible; disabled until the main selection is playable and extra cards remain
+- Pending-vote overlay for everyone: main + tempelan cards, combination labels, per-player Yes/No/Waiting, countdown, Accept/Reject for eligible voters, waiting states for the tempeler and finished players
+- Action log entries for tempelan play/vote/accept/reject; board shows the accepted/rejected metadata; hand is locked while voting
+
+Verified:
+- `npm test` → 68/68 passing (45 shared + 23 server)
+- Engine: validation, accept/reject behavior, finish only on acceptance, finished voters excluded, solo auto-accept, bomb main on a single 2
+- Server: timer pause, all-yes accept, no-vote rejection, timeout rejection, bot auto-votes, and a Socket.io tempelan accept flow
+- `npm run build` and production smoke test pass
+
+Decisions:
+- A single no resolves rejection immediately; remaining votes are unnecessary. Timeout rejects.
+- Vote deadline starts when the tempelan is played and is not extended by incoming votes.
+- Bot voting is intentionally simple for now (rank comparison); Phase 6 can refine it.
+- Main and attached card sets must be disjoint; the attached hand must be exactly one valid combination and cannot be a bomb.
+
 ## Rule revisions
 
 ### Tempelan v2 (2026-11-02)
 
-PRD §2.7 and Timeline.md Phase 5 updated to the clarified rules (implementation pending in Phase 5):
+PRD §2.7 and Timeline.md Phase 5 were updated to the clarified rules; **implemented in Phase 5** (see above).
 
 - Tempel button is always available — every turn, whether beating or leading a fresh trick
 - Main hand: any valid combo under normal play rules
@@ -181,7 +220,7 @@ PRD §2.7 and Timeline.md Phase 5 updated to the clarified rules (implementation
 - All yes → accepted: attached hand survives and becomes the active combo the next player must beat
 - Any no → rejected: only the attached hand returns to the player's hand; the main hand stays as the active play
 - Turn passes to the next active player after resolution; timeout counts as rejection
-- Engine impact for Phase 5: needs a pending-vote state, both hands removed at play time, and attached-hand rollback on rejection (accepted play replaces the active combo with the attached combination)
+- Engine impact (done): pending-vote state, both hands removed at play time, attached-hand rollback on rejection, and accepted plays swapping the active combo to the attached combination
 
 ## Planned enhancements
 

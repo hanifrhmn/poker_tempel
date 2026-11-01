@@ -4,6 +4,7 @@ import {
   canPlayCombination,
   cardKey,
   detectCombination,
+  isBomb,
 } from '@poker-tempel/shared';
 import ActionLog from './ActionLog.jsx';
 import Button from './Button.jsx';
@@ -12,11 +13,14 @@ import GameEndOverlay from './GameEndOverlay.jsx';
 import PlayerPanel from './PlayerPanel.jsx';
 import RoomHeader from './RoomHeader.jsx';
 import RoundEndOverlay from './RoundEndOverlay.jsx';
+import TempelanVotePanel from './TempelanVotePanel.jsx';
 import TurnTimer from './TurnTimer.jsx';
 import { ordinal } from '../lib/format.js';
 
 export default function GameScreen({ room, send, onLeave }) {
   const [selected, setSelected] = useState(() => new Set());
+  const [tempelMode, setTempelMode] = useState(false);
+  const [tempelMain, setTempelMain] = useState([]);
 
   const mySeat = room.yourSeat;
   const isHost = mySeat === room.hostSeat;
@@ -25,6 +29,8 @@ export default function GameScreen({ room, send, onLeave }) {
   const hand = room.you?.hand ?? [];
   const handSignature = hand.map(cardKey).join(',');
   const active = room.activePlay?.combination ?? null;
+  const tempelanInfo = room.activePlay?.tempelan ?? null;
+  const hasPendingTempelan = Boolean(room.pendingTempelan);
   const players = room.players ?? [];
   const playerBySeat = Object.fromEntries(players.map((player) => [player.seat, player]));
   const passedSeats = new Set(room.passedSeats ?? []);
@@ -35,7 +41,11 @@ export default function GameScreen({ room, send, onLeave }) {
 
   useEffect(() => {
     setSelected(new Set());
-  }, [handSignature, room.round, room.status]);
+    if (!isMyTurn || hasPendingTempelan || !isPlaying) {
+      setTempelMode(false);
+      setTempelMain([]);
+    }
+  }, [handSignature, room.round, room.status, isMyTurn, hasPendingTempelan, isPlaying]);
 
   const selectedCards = useMemo(
     () => hand.filter((card) => selected.has(cardKey(card))),
@@ -45,10 +55,25 @@ export default function GameScreen({ room, send, onLeave }) {
   const beatsTable = Boolean(combination && canPlayCombination(combination, active));
   const canPlay = Boolean(isMyTurn && beatsTable);
 
+  const tempelMainCards = useMemo(
+    () => hand.filter((card) => tempelMain.includes(cardKey(card))),
+    [hand, tempelMain],
+  );
+  const tempelMainCombination =
+    tempelMainCards.length > 0 ? detectCombination(tempelMainCards) : null;
+  const attachedCombination =
+    tempelMode && selectedCards.length > 0 ? detectCombination(selectedCards) : null;
+  const canTempelPlay = Boolean(
+    isMyTurn && attachedCombination && !isBomb(attachedCombination),
+  );
+  const canStartTempel = Boolean(canPlay && hand.length > selected.size);
+
   const toggle = (card) => {
+    const key = cardKey(card);
+    if (tempelMode && tempelMain.includes(key)) return;
+
     setSelected((previous) => {
       const next = new Set(previous);
-      const key = cardKey(card);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
@@ -56,18 +81,44 @@ export default function GameScreen({ room, send, onLeave }) {
   };
 
   const play = async () => {
-    if (!canPlay) return;
+    if (!canPlay || tempelMode) return;
     const result = await send('game:play', { cards: [...selected] });
     if (result?.ok) setSelected(new Set());
   };
 
   const pass = async () => {
-    if (!isMyTurn || !active) return;
+    if (!isMyTurn || !active || tempelMode) return;
     const result = await send('game:pass');
     if (result?.ok) setSelected(new Set());
   };
 
-  const selectionHint = !combination
+  const startTempel = () => {
+    if (!canStartTempel) return;
+    setTempelMain([...selected]);
+    setSelected(new Set());
+    setTempelMode(true);
+  };
+
+  const cancelTempel = () => {
+    setTempelMode(false);
+    setTempelMain([]);
+    setSelected(new Set());
+  };
+
+  const submitTempel = async () => {
+    if (!canTempelPlay) return;
+    const result = await send('game:tempelan', {
+      mainCards: tempelMain,
+      attachedCards: [...selected],
+    });
+    if (result?.ok) {
+      setTempelMode(false);
+      setTempelMain([]);
+      setSelected(new Set());
+    }
+  };
+
+  const normalHint = !combination
     ? 'Not a valid combination'
     : !isMyTurn
       ? 'Waiting for your turn'
@@ -75,17 +126,47 @@ export default function GameScreen({ room, send, onLeave }) {
         ? 'Ready to play'
         : 'Cannot beat the table';
 
-  const dockTitle = me?.finished
-    ? `You finished ${ordinal(me.placement)}`
-    : !isPlaying
-      ? room.status === 'round-end'
-        ? 'Round complete'
-        : 'Session complete'
-      : isMyTurn
-        ? active
-          ? 'Beat the active play'
-          : 'Lead the trick'
-        : `${currentPlayer?.name ?? '…'} is thinking`;
+  const tempelHint = !selected.size
+    ? 'Pick one extra hand to tempel'
+    : !attachedCombination
+      ? 'Not a valid combination'
+      : isBomb(attachedCombination)
+        ? 'Bombs cannot be tempeled'
+        : 'Ready to tempel';
+
+  const hintText = tempelMode
+    ? attachedCombination
+      ? `${COMBINATION_LABELS[attachedCombination.type] ?? attachedCombination.type} · ${tempelHint}`
+      : tempelHint
+    : combination
+      ? `${COMBINATION_LABELS[combination.type] ?? combination.type} · ${normalHint}`
+      : normalHint;
+
+  const hintColor = tempelMode
+    ? canTempelPlay
+      ? 'text-emerald-300'
+      : attachedCombination && isBomb(attachedCombination)
+        ? 'text-red-300'
+        : 'text-amber-300/80'
+    : !combination
+      ? 'text-amber-300/80'
+      : canPlay
+        ? 'text-emerald-300'
+        : 'text-red-300';
+
+  const dockTitle = tempelMode
+    ? `Main: ${tempelMainCombination ? COMBINATION_LABELS[tempelMainCombination.type] : 'hand'} · now pick the tempelan hand`
+    : me?.finished
+      ? `You finished ${ordinal(me.placement)}`
+      : !isPlaying
+        ? room.status === 'round-end'
+          ? 'Round complete'
+          : 'Session complete'
+        : isMyTurn
+          ? active
+            ? 'Beat the active play'
+            : 'Lead the trick'
+          : `${currentPlayer?.name ?? '…'} is thinking`;
 
   const opponentPositions = [
     'md:absolute md:left-0 md:top-1/2 md:w-48 md:-translate-y-1/2',
@@ -149,6 +230,13 @@ export default function GameScreen({ room, send, onLeave }) {
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300/80">
                     {COMBINATION_LABELS[active.type] ?? active.type}
                   </p>
+                  {tempelanInfo ? (
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-300/70">
+                      Tempelan {tempelanInfo.accepted ? 'accepted' : 'rejected'} ·{' '}
+                      {COMBINATION_LABELS[tempelanInfo.main.combination.type]} +{' '}
+                      {COMBINATION_LABELS[tempelanInfo.attached.combination.type]}
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="text-sm text-emerald-200/40">No cards on the table</p>
@@ -167,57 +255,99 @@ export default function GameScreen({ room, send, onLeave }) {
               </p>
               <p className="truncate text-sm font-bold text-amber-200">{dockTitle}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => setSelected(new Set())}
-                disabled={selected.size === 0}
-              >
-                Deselect
-              </Button>
-              <Button variant="secondary" onClick={pass} disabled={!isMyTurn || !active}>
-                Pass
-              </Button>
-              <Button variant="primary" onClick={play} disabled={!canPlay}>
-                Play
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {tempelMode ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSelected(new Set())}
+                    disabled={selected.size === 0}
+                  >
+                    Deselect
+                  </Button>
+                  <Button variant="secondary" onClick={cancelTempel}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" onClick={submitTempel} disabled={!canTempelPlay}>
+                    Play tempelan
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSelected(new Set())}
+                    disabled={selected.size === 0}
+                  >
+                    Deselect
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={pass}
+                    disabled={!isMyTurn || !active || hasPendingTempelan}
+                  >
+                    Pass
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={startTempel}
+                    disabled={!canStartTempel || hasPendingTempelan}
+                  >
+                    Tempel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={play}
+                    disabled={!canPlay || hasPendingTempelan}
+                  >
+                    Play
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
           <div className="mt-2 overflow-x-auto pb-1">
             <div className="mx-auto flex min-w-max items-end justify-center px-3 pt-4">
-              {hand.map((card, index) => (
-                <CardFace
-                  key={cardKey(card)}
-                  card={card}
-                  selected={selected.has(cardKey(card))}
-                  onClick={() => toggle(card)}
-                  className={index === 0 ? '' : '-ml-3 sm:-ml-5'}
-                />
-              ))}
+              {hand.map((card, index) => {
+                const key = cardKey(card);
+                const isMain = tempelMode && tempelMain.includes(key);
+                const isSelected = selected.has(key);
+                const locked = hasPendingTempelan || isMain || !isPlaying;
+
+                return (
+                  <CardFace
+                    key={key}
+                    card={card}
+                    selected={isMain || isSelected}
+                    highlight={isMain ? 'sky' : 'amber'}
+                    disabled={locked}
+                    onClick={locked ? undefined : () => toggle(card)}
+                    className={index === 0 ? '' : '-ml-3 sm:-ml-5'}
+                  />
+                );
+              })}
             </div>
           </div>
 
           <div className="mt-1 flex h-5 items-center justify-center text-xs">
-            {selected.size > 0 ? (
-              <span
-                className={
-                  !combination
-                    ? 'text-amber-300/80'
-                    : canPlay
-                      ? 'text-emerald-300'
-                      : 'text-red-300'
-                }
-              >
-                {combination
-                  ? `${COMBINATION_LABELS[combination.type] ?? combination.type} · ${selectionHint}`
-                  : selectionHint}
-              </span>
+            {selected.size > 0 || tempelMode ? (
+              <span className={hintColor}>{hintText}</span>
             ) : null}
           </div>
         </section>
       </main>
 
+      {room.pendingTempelan ? (
+        <TempelanVotePanel
+          pending={room.pendingTempelan}
+          players={players}
+          mySeat={mySeat}
+          tempelDeadline={room.tempelDeadline}
+          durationMs={room.tempelVoteTimeoutMs}
+          onVote={(vote) => send('game:tempelanVote', { vote })}
+        />
+      ) : null}
       {room.status === 'round-end' ? (
         <RoundEndOverlay room={room} send={send} isHost={isHost} />
       ) : null}
