@@ -6,7 +6,7 @@ Last updated: 2026-11-02
 
 | Phase | Name | Status |
 | :---: | :--- | :--- |
-| 0 | Project Setup & Scaffolding | In progress |
+| 0 | Project Setup & Scaffolding | Done |
 | 1 | Core Game Engine | Not started |
 | 2 | Session Flow & Opening Rules | Not started |
 | 3 | Multiplayer Server | Not started |
@@ -25,17 +25,27 @@ Legend: `Not started` · `In progress` · `Done`
 
 ## Phase 0 — Project Setup & Scaffolding
 
-Status: **In progress**
+Status: **Done**
 
-Checklist:
-- [x] Timeline.md and current_pg.md written
-- [ ] Monorepo workspaces (client/server/shared)
-- [ ] Vite + React + Tailwind placeholder
-- [ ] Express + Socket.io health check
-- [ ] Dev/build/start scripts
-- [ ] Verified `npm run dev`, `npm run build`, `npm start`
+Built:
+- npm workspaces monorepo: `client/`, `server/`, `shared/` (`@poker-tempel/*`)
+- React 19 + Vite 8 + Tailwind CSS 4 client with a themed placeholder landing page
+- Express 5 + Socket.io 4 server with `/api/health` and a `server:hello` event
+- Shared package exporting game constants (`GAME_NAME`, `MAX_PLAYERS`, `HAND_SIZE`, `DISCONNECT_BOT_TAKEOVER_MS`)
+- Dev: `npm run dev` runs server (`node --watch`) and Vite concurrently; `/api` and `/socket.io` proxied to port 3000
+- Prod: `npm run build` then `npm start`; server serves `client/dist` with SPA fallback
+- Root `.gitignore` and `README.md`
 
-Notes: Initial plan approved. React + Vite chosen, Tailwind for styling, push per phase.
+Verified:
+- `npm install`, `npm run build`, `npm start` → `/api/health` returns `ok`, built page served with 200
+- `npm run dev` → Vite on `:5173`, proxied health check `ok`, Socket.io connection works
+
+Decisions:
+- Plain JavaScript with ESM (no TypeScript) to keep the build simple
+- Tailwind v4 via `@tailwindcss/vite` (no PostCSS config needed)
+- Server is authoritative; clients will never receive other players' hands
+
+Notes: Vite dev binds localhost only — game-night play uses the production server on `0.0.0.0:3000`.
 
 ## How this file is maintained
 
