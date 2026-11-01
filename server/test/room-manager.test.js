@@ -7,6 +7,7 @@ import {
   detectCombination,
   sortHand,
 } from '@poker-tempel/shared';
+import { chooseBotMove } from '../src/bot.js';
 import { createRoomManager } from '../src/room-manager.js';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -579,4 +580,41 @@ test('bots vote automatically on a tempelan', async (t) => {
   assert.equal(resolved, true);
   assert.equal(room.session.currentGame.activePlay.tempelan.accepted, true);
   assert.equal(cardKey(room.session.currentGame.activePlay.combination.cards[0]), attached);
+});
+
+test('a human and three bots can complete a full round', async (t) => {
+  const manager = makeManager({ botDelayMs: 5 });
+  t.after(() => manager.close());
+
+  const created = manager.createRoom({ name: 'Human' });
+  const code = created.code;
+
+  assert.equal(manager.addBot({ code, playerId: created.playerId }).ok, true);
+  assert.equal(manager.addBot({ code, playerId: created.playerId }).ok, true);
+  assert.equal(manager.addBot({ code, playerId: created.playerId }).ok, true);
+  assert.equal(manager.startGame({ code, playerId: created.playerId }).ok, true);
+
+  const room = manager.getRoom(code);
+  const humanSeat = 0;
+  const deadline = Date.now() + 15_000;
+
+  while (room.session.status === SESSION_STATUS.PLAYING && Date.now() < deadline) {
+    const game = room.session.currentGame;
+
+    if (game.turn === humanSeat) {
+      const move = chooseBotMove(game, humanSeat);
+      if (!move) break;
+
+      const result =
+        move.type === 'play'
+          ? manager.play({ code, playerId: created.playerId, cards: move.cards })
+          : manager.pass({ code, playerId: created.playerId });
+      assert.equal(result.ok, true);
+    } else {
+      await delay(10);
+    }
+  }
+
+  assert.equal(room.session.status, SESSION_STATUS.ROUND_END);
+  assert.equal(room.session.lastRoundResult.placements.length, 4);
 });

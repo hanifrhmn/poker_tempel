@@ -12,7 +12,7 @@ Last updated: 2026-11-02
 | 3 | Multiplayer Server | Done |
 | 4 | Frontend UI | Done |
 | 5 | Tempelan | Done |
-| 6 | Bots (AI) | Not started |
+| 6 | Bots (AI) | Done |
 | 7 | Polish & LAN Testing | Not started |
 
 Legend: `Not started` · `In progress` · `Done`
@@ -206,6 +206,36 @@ Decisions:
 - Vote deadline starts when the tempelan is played and is not extended by incoming votes.
 - Bot voting is intentionally simple for now (rank comparison); Phase 6 can refine it.
 - Main and attached card sets must be disjoint; the attached hand must be exactly one valid combination and cannot be a bomb.
+
+## Phase 6 — Bots (AI)
+
+Status: **Done**
+
+Built:
+- `shared/src/combinations.js` — `enumeratePlayableCombinations(hand, active)` enumerates every legal 1–5 card combination from a hand for the current table using the existing detector/comparison rules
+- `server/src/bot.js` — `chooseBotMove` now plays real Big Two:
+  - **Leading:** lowest valid combination by primary rank; more cards win ties, so a pair/triple of the lowest rank is preferred over its single
+  - **Responding:** lowest valid combination that beats the table, including pairs, triples, seri, polo, polo seri, and straight flush
+  - **Bombing:** a single `2` on the table triggers a 50% bomb attempt (injectable RNG); when bombing, the lowest bomb is chosen
+  - **Bomb chaining:** if the table is already a bomb, play the lowest higher same-class bomb
+  - Passes when nothing legal beats the table; never leads a bomb (engine-enforced)
+- Lobby bots and disconnect takeover automatically use the improved AI; the pacing delay stays configurable (`botDelayMs`, 800ms default)
+- Tempelan voting keeps the Phase 5 heuristic (accept if the attached primary rank is ≤ the main rank)
+
+Opening note:
+- Round 1 discards all 3s and the 3♠ holder leads, so PRD §5's "lead with the 3♠ combo" is covered by the session opening rule; bots lead their lowest valid combination when they open.
+
+Verified:
+- `npm test` → 77/77 passing (47 shared + 30 server)
+- Enumerator tests: leading excludes bombs and only responses that beat the table are returned
+- Bot tests: lowest pair/triple leads, pair/seri/polo/straight-flush responses, 50% bomb on a single 2 (both outcomes), no bomb leads, bomb chaining, and four bots completing a full game
+- Room-manager test: a human + 3 bots complete a full round with real timers
+- `npm run build` passes (client bundle unchanged; enumerator is tree-shaken from the browser build)
+
+Decisions:
+- "Lowest combination" is ordered by primary rank, with more cards preferred on ties; this keeps leads conservative while allowing the bot to shed pairs/triples of its lowest rank
+- Bots do not initiate tempelan (not required by PRD §5); they still vote on them
+- Bot decisions remain synchronous and side-effect free; randomness is injectable for deterministic tests
 
 ## Rule revisions
 

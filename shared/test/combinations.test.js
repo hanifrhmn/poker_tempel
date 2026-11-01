@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canPlayCombination,
+  cardKey,
   detectCombination,
+  enumeratePlayableCombinations,
   parseCard,
   beats,
   isBomb,
@@ -197,4 +199,38 @@ test('bombs cannot be led but other combinations can', () => {
 
   assert.equal(canPlayCombination(combo('3S', '3H', '3D', '3C'), combo('2H')), true);
   assert.equal(canPlayCombination(combo('3S', '3H', '3D', '3C'), combo('AH')), false);
+});
+
+test('enumerates combinations for leading without bombs', () => {
+  const cards = hand(['3S', '3H', '5D']);
+  const combinations = enumeratePlayableCombinations(cards, null);
+
+  assert.ok(combinations.some((entry) => entry.type === 'single'));
+  assert.ok(
+    combinations.some((entry) => entry.type === 'pair' && entry.primaryRank === '3'),
+  );
+  assert.equal(combinations.some((entry) => isBomb(entry)), false);
+
+  const bombCards = hand(['5S', '5H', '5D', '5C']);
+  const bombCombinations = enumeratePlayableCombinations(bombCards, null);
+  assert.equal(bombCombinations.some((entry) => isBomb(entry)), false);
+
+  const keys = combinations.map((entry) => entry.cards.map(cardKey).join(','));
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('enumerates only combinations that beat the active play', () => {
+  const cards = hand(['4S', '4H', '5S', '5H', '5D', '5C', '2C', '2H']);
+  const combinations = enumeratePlayableCombinations(cards, combo('3S', '3H'));
+
+  assert.ok(
+    combinations.every((entry) => entry.type === 'pair' && entry.primaryValue > 3),
+  );
+  assert.ok(combinations.some((entry) => entry.primaryRank === '4'));
+  assert.ok(combinations.some((entry) => entry.primaryRank === '2'));
+  assert.equal(combinations.some((entry) => isBomb(entry)), false);
+
+  const bombOnly = enumeratePlayableCombinations(cards, combo('2S'));
+  assert.ok(bombOnly.length > 0);
+  assert.ok(bombOnly.every((entry) => isBomb(entry)));
 });

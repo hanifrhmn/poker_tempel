@@ -205,3 +205,29 @@ export function canPlayCombination(combination, active) {
   if (!active) return !isBomb(combination);
   return beats(combination, active);
 }
+
+export function enumeratePlayableCombinations(hand, active = null) {
+  const results = [];
+  const cards = [...hand];
+  const picked = [];
+
+  const visit = (start) => {
+    if (picked.length > 0) {
+      const combination = detectCombination(picked);
+      if (combination && canPlayCombination(combination, active)) {
+        results.push(combination);
+      }
+    }
+
+    if (picked.length === 5) return;
+
+    for (let index = start; index < cards.length; index += 1) {
+      picked.push(cards[index]);
+      visit(index + 1);
+      picked.pop();
+    }
+  };
+
+  visit(0);
+  return results;
+}
