@@ -96,6 +96,13 @@ test('round 1 discards every 3 and the 3S holder leads', () => {
   const game = session.currentGame;
   const cardsInHands = game.players.flatMap((player) => player.hand);
 
+  assert.ok(started.opening);
+  assert.equal(started.opening.leader, game.turn);
+  assert.deepEqual(
+    started.opening.discards.flatMap((entry) => entry.cards).sort(),
+    ['3C', '3D', '3H', '3S'],
+  );
+
   assert.equal(cardsInHands.length, 48);
   assert.equal(cardsInHands.filter((card) => card.rank === '3').length, 0);
   assert.equal(new Set(cardsInHands.map(cardKey)).size, 48);

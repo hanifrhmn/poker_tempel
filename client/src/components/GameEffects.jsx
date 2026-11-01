@@ -31,6 +31,38 @@ export default function GameEffects({ effect }) {
     );
   }
 
+  if (effect.kind === 'tempelanAccepted') {
+    return (
+      <div key={effect.id} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-emerald-400/10 animate-slam-flash" />
+        <div className="rounded-2xl border border-emerald-400/50 bg-emerald-950/85 px-8 py-5 text-center shadow-2xl animate-finish-pop">
+          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-emerald-300/80">
+            Tempelan
+          </p>
+          <p className="mt-1 text-3xl font-black uppercase tracking-[0.2em] text-emerald-300">
+            Accepted
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (effect.kind === 'tempelanRejected') {
+    return (
+      <div key={effect.id} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-red-500/10 animate-slam-flash" />
+        <div className="rounded-2xl border border-red-400/50 bg-red-950/85 px-8 py-5 text-center shadow-2xl animate-finish-pop">
+          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-red-300/80">
+            Tempelan
+          </p>
+          <p className="mt-1 text-3xl font-black uppercase tracking-[0.2em] text-red-300">
+            Rejected
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (effect.kind === 'finish') {
     return (
       <div key={effect.id} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">

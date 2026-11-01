@@ -138,7 +138,7 @@ export function startNextRound(session, { rng = Math.random } = {}) {
       at: Date.now(),
       leader: opening.leader,
       discards: opening.discards,
-      message: `${session.players[opening.leader].name} holds 3♠ and leads after all 3s are discarded`,
+      message: 'Opening: everyone reveals their 3s',
     });
   }
 

@@ -11,6 +11,7 @@ import Button from './Button.jsx';
 import CardFace from './CardFace.jsx';
 import GameEffects from './GameEffects.jsx';
 import GameEndOverlay from './GameEndOverlay.jsx';
+import OpeningSequence from './OpeningSequence.jsx';
 import PlayerPanel from './PlayerPanel.jsx';
 import RoomHeader from './RoomHeader.jsx';
 import RoundEndOverlay from './RoundEndOverlay.jsx';
@@ -33,6 +34,7 @@ export default function GameScreen({ room, send, onLeave }) {
   const active = room.activePlay?.combination ?? null;
   const tempelanInfo = room.activePlay?.tempelan ?? null;
   const hasPendingTempelan = Boolean(room.pendingTempelan);
+  const hasOpening = Boolean(room.opening);
   const players = room.players ?? [];
   const playerBySeat = Object.fromEntries(players.map((player) => [player.seat, player]));
   const passedSeats = new Set(room.passedSeats ?? []);
@@ -157,19 +159,21 @@ export default function GameScreen({ room, send, onLeave }) {
         ? 'text-emerald-300'
         : 'text-red-300';
 
-  const dockTitle = tempelMode
-    ? `Main: ${tempelMainCombination ? COMBINATION_LABELS[tempelMainCombination.type] : 'hand'} · now pick the tempelan hand`
-    : me?.finished
-      ? `You finished ${ordinal(me.placement)}`
-      : !isPlaying
-        ? room.status === 'round-end'
-          ? 'Round complete'
-          : 'Session complete'
-        : isMyTurn
-          ? active
-            ? 'Beat the active play'
-            : 'Lead the trick'
-          : `${currentPlayer?.name ?? '…'} is thinking`;
+  const dockTitle = hasOpening
+    ? 'Revealing opening 3s…'
+    : tempelMode
+      ? `Main: ${tempelMainCombination ? COMBINATION_LABELS[tempelMainCombination.type] : 'hand'} · now pick the tempelan hand`
+      : me?.finished
+        ? `You finished ${ordinal(me.placement)}`
+        : !isPlaying
+          ? room.status === 'round-end'
+            ? 'Round complete'
+            : 'Session complete'
+          : isMyTurn
+            ? active
+              ? 'Beat the active play'
+              : 'Lead the trick'
+            : `${currentPlayer?.name ?? '…'} is thinking`;
 
   const opponentPositions = [
     'md:absolute md:left-0 md:top-1/2 md:w-48 md:-translate-y-1/2',
@@ -301,21 +305,21 @@ export default function GameScreen({ room, send, onLeave }) {
                   <Button
                     variant="secondary"
                     onClick={pass}
-                    disabled={!isMyTurn || !active || hasPendingTempelan}
+                    disabled={!isMyTurn || !active || hasPendingTempelan || hasOpening}
                   >
                     Pass
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={startTempel}
-                    disabled={!canStartTempel || hasPendingTempelan}
+                    disabled={!canStartTempel || hasPendingTempelan || hasOpening}
                   >
                     Tempel
                   </Button>
                   <Button
                     variant="primary"
                     onClick={play}
-                    disabled={!canPlay || hasPendingTempelan}
+                    disabled={!canPlay || hasPendingTempelan || hasOpening}
                   >
                     Play
                   </Button>
@@ -333,7 +337,7 @@ export default function GameScreen({ room, send, onLeave }) {
                 const key = cardKey(card);
                 const isMain = tempelMode && tempelMain.includes(key);
                 const isSelected = selected.has(key);
-                const locked = hasPendingTempelan || isMain || !isPlaying;
+                const locked = hasPendingTempelan || hasOpening || isMain || !isPlaying;
 
                 return (
                   <CardFace
@@ -359,6 +363,9 @@ export default function GameScreen({ room, send, onLeave }) {
         </section>
       </main>
 
+      {hasOpening ? (
+        <OpeningSequence opening={room.opening} players={players} mySeat={mySeat} />
+      ) : null}
       {room.pendingTempelan ? (
         <TempelanVotePanel
           pending={room.pendingTempelan}

@@ -38,6 +38,30 @@ test('passes, finishes, and game over classify correctly', () => {
   assert.equal(classifyGameEvent(null, null), null);
 });
 
+test('tempelan results show accepted or rejected feedback', () => {
+  const accepted = classifyGameEvent({ type: 'tempelan-accepted' }, null);
+  const rejected = classifyGameEvent({ type: 'tempelan-rejected' }, null);
+
+  assert.equal(accepted.kind, 'tempelanAccepted');
+  assert.equal(accepted.sound, 'tempelAccept');
+  assert.equal(rejected.kind, 'tempelanRejected');
+  assert.equal(rejected.sound, 'tempelReject');
+});
+
+test('tempelan-resolved plays keep the result banner instead of a slam', () => {
+  const event = {
+    type: 'play',
+    isBomb: true,
+    beaten: { type: 'single' },
+    tempelan: { accepted: true },
+    at: 2000,
+  };
+  const effect = classifyGameEvent(event, 1500);
+
+  assert.equal(effect.kind, 'play');
+  assert.equal(effect.sound, 'card');
+});
+
 test('last play timestamp updates only on play events', () => {
   assert.equal(nextLastPlayAt({ type: 'play', at: 123 }, null), 123);
   assert.equal(nextLastPlayAt({ type: 'pass', at: 456 }, 123), 123);

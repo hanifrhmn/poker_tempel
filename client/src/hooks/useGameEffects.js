@@ -20,7 +20,16 @@ export function useGameEffects({ room, mySeat }) {
 
       if (classified.sound) playSound(classified.sound);
 
-      if (['bomb', 'slam', 'finish', 'win'].includes(classified.kind)) {
+      if (
+        [
+          'bomb',
+          'slam',
+          'finish',
+          'win',
+          'tempelanAccepted',
+          'tempelanRejected',
+        ].includes(classified.kind)
+      ) {
         setEffect({
           kind: classified.kind,
           id: `${event.type}-${event.at}-${Math.random()}`,
@@ -29,10 +38,14 @@ export function useGameEffects({ room, mySeat }) {
         });
 
         if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-        clearTimerRef.current = setTimeout(
-          () => setEffect(null),
-          classified.kind === 'bomb' ? 1400 : 1100,
-        );
+        const holdMs =
+          classified.kind === 'bomb'
+            ? 1400
+            : classified.kind === 'tempelanAccepted' ||
+                classified.kind === 'tempelanRejected'
+              ? 1600
+              : 1100;
+        clearTimerRef.current = setTimeout(() => setEffect(null), holdMs);
       }
     };
 

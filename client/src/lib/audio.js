@@ -115,6 +115,15 @@ export function playSound(name) {
       burst({ duration: 0.18, gain: 0.09, frequency: 700 });
       tone({ frequency: 150, endFrequency: 60, duration: 0.22, gain: 0.09, type: 'sine' });
       break;
+    case 'tempelAccept':
+      [660, 880, 1320].forEach((frequency, index) => {
+        tone({ frequency, duration: 0.16, gain: 0.05, when: index * 0.09, type: 'triangle' });
+      });
+      break;
+    case 'tempelReject':
+      tone({ frequency: 330, endFrequency: 180, duration: 0.32, gain: 0.07, type: 'sawtooth' });
+      burst({ duration: 0.18, gain: 0.05, frequency: 500, type: 'lowpass' });
+      break;
     case 'bomb':
       burst({ duration: 0.55, gain: 0.16, frequency: 400, type: 'lowpass' });
       tone({ frequency: 90, endFrequency: 35, duration: 0.65, gain: 0.18, type: 'sine' });

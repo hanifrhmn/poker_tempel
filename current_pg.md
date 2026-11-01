@@ -263,6 +263,13 @@ Final PRD audit:
 - Documented interpretations remain: round-1 3s discard opening, bomb chaining, trick reset when all remaining players pass, placeholder 3/2/1/0 score table, tempelan v2, bot lead heuristic
 - Known limits: rooms are in-memory (a server restart clears them); the LAN smoke test used the local Wi-Fi adapter rather than the actual VPN adapters; no browser automation was available for UI E2E, so the 4-tab visual playthrough is part of the manual game-night check
 
+## Post-Phase 7 polish (2026-11-02)
+
+- **Round-1 opening reveal:** the 3s are no longer silently discarded. The server exposes an `opening` phase (`openingDurationMs`, default 3600ms) with every player's discarded 3s; play/pass/tempel actions are blocked while it runs. The client shows a staged `OpeningSequence` overlay (one player at a time with card sounds), highlights the 3♠ holder, then play begins. The action log says "everyone reveals their 3s" first and logs "All 3s discarded — X leads first" only when the reveal finishes.
+- **Tempelan result feedback:** accepting or rejecting a tempelan now shows an on-screen **ACCEPTED** / **REJECTED** banner with distinct sounds (`tempelAccept` / `tempelReject`). The follow-up resolved play keeps the banner (no slam/bomb overlay) so the result stays readable.
+- Opening/pending timers and the turn timer are coordinated; the opening is validated over a real production server (4×3s revealed, `turnDeadline` null during the reveal, cleared at ~3.6s, `opening-complete` logged).
+- `npm test` → 86/86 passing (47 shared + 32 server + 7 client); build → 309.42 kB JS / 95.00 kB gzip, 45.64 kB CSS / 8.10 kB gzip.
+
 ## Rule revisions
 
 ### Tempelan v2 (2026-11-02)

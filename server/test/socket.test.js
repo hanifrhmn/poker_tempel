@@ -47,7 +47,7 @@ function waitForState(socket, predicate, timeoutMs = 3000) {
 }
 
 async function startServer(options = {}) {
-  const server = createPokerServer(options);
+  const server = createPokerServer({ openingDurationMs: 0, ...options });
   await new Promise((resolve) => server.httpServer.listen(0, '127.0.0.1', resolve));
   const { port } = server.httpServer.address();
   return { server, url: `http://127.0.0.1:${port}` };

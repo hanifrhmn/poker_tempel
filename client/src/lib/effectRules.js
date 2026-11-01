@@ -5,6 +5,7 @@ export function classifyGameEvent(event, lastPlayAt = null) {
 
   if (event.type === 'play') {
     const delta = lastPlayAt === null ? Infinity : event.at - lastPlayAt;
+    if (event.tempelan) return { kind: 'play', sound: 'card', delta };
     if (event.isBomb) return { kind: 'bomb', sound: 'bomb', delta };
     if (event.beaten && delta <= SLAM_WINDOW_MS) {
       return { kind: 'slam', sound: 'slam', delta };
@@ -15,6 +16,10 @@ export function classifyGameEvent(event, lastPlayAt = null) {
   switch (event.type) {
     case 'tempelan-play':
       return { kind: 'play', sound: 'card', delta: null };
+    case 'tempelan-accepted':
+      return { kind: 'tempelanAccepted', sound: 'tempelAccept', delta: null };
+    case 'tempelan-rejected':
+      return { kind: 'tempelanRejected', sound: 'tempelReject', delta: null };
     case 'pass':
       return { kind: 'pass', sound: 'pass', delta: null };
     case 'trick-reset':

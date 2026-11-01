@@ -52,6 +52,7 @@ export function createRoomManager(options = {}) {
     botDelayMs: 800,
     tempelVoteTimeoutMs: 15_000,
     botVoteDelayMs: 700,
+    openingDurationMs: 3_600,
     ...options,
   };
 
@@ -120,6 +121,9 @@ export function createRoomManager(options = {}) {
   function clearRoomTimers(room) {
     clearActionTimers(room);
     clearTempelTimers(room);
+    if (room.openingTimer) clearTimeout(room.openingTimer);
+    room.openingTimer = null;
+    room.opening = null;
     for (const slot of room.slots) {
       if (slot?.disconnectTimer) clearTimeout(slot.disconnectTimer);
       if (slot) slot.disconnectTimer = null;
@@ -209,6 +213,57 @@ export function createRoomManager(options = {}) {
     for (const event of events) emitGameEvent(room, event);
   }
 
+  function clearOpeningTimer(room) {
+    if (room.openingTimer) clearTimeout(room.openingTimer);
+    room.openingTimer = null;
+    room.opening = null;
+  }
+
+  function beginOpening(room, opening) {
+    if (!opening || config.openingDurationMs <= 0) return;
+
+    clearOpeningTimer(room);
+    const startedAt = Date.now();
+    room.opening = {
+      leader: opening.leader,
+      discards: opening.discards,
+      startedAt,
+      endsAt: startedAt + config.openingDurationMs,
+    };
+    room.openingTimer = setTimeout(
+      () => finishOpening(room.code),
+      config.openingDurationMs,
+    );
+  }
+
+  function finishOpening(code) {
+    const room = rooms.get(code);
+    if (!room?.opening) return;
+
+    const opening = room.opening;
+    room.opening = null;
+    room.openingTimer = null;
+
+    const game = room.session?.currentGame;
+    const events = [];
+
+    if (game) {
+      const leaderName = game.players[opening.leader]?.name ?? 'The 3♠ holder';
+      const event = {
+        type: 'opening-complete',
+        at: Date.now(),
+        playerIndex: opening.leader,
+        message: `All 3s discarded — ${leaderName} leads first`,
+      };
+      game.log.push(event);
+      events.push(event);
+    }
+
+    syncTimers(room);
+    emitUpdate(room);
+    for (const event of events) emitGameEvent(room, event);
+  }
+
   function syncTimers(room) {
     clearActionTimers(room);
 
@@ -216,6 +271,11 @@ export function createRoomManager(options = {}) {
     if (!session || session.status !== SESSION_STATUS.PLAYING) {
       room.turnDeadline = null;
       clearTempelTimers(room);
+      return;
+    }
+
+    if (room.opening) {
+      room.turnDeadline = null;
       return;
     }
 
@@ -267,6 +327,7 @@ export function createRoomManager(options = {}) {
   function onTurnTimeout(code) {
     const room = rooms.get(code);
     if (!room?.session || room.session.status !== SESSION_STATUS.PLAYING) return;
+    if (room.opening) return;
 
     const game = room.session.currentGame;
     const seat = game.turn;
@@ -283,6 +344,7 @@ export function createRoomManager(options = {}) {
   function onBotTurn(code, seat) {
     const room = rooms.get(code);
     if (!room?.session || room.session.status !== SESSION_STATUS.PLAYING) return;
+    if (room.opening) return;
 
     const game = room.session.currentGame;
     if (game.turn !== seat || !room.slots[seat]?.isBot) return;
@@ -359,6 +421,7 @@ export function createRoomManager(options = {}) {
       turnDeadline: room.turnDeadline,
       activePlay: game.activePlay,
       passedSeats: [...game.passedThisTrick],
+      opening: room.opening,
       pendingTempelan: pending
         ? {
             playerIndex: pending.playerIndex,
@@ -414,6 +477,8 @@ export function createRoomManager(options = {}) {
       tempelDeadline: null,
       tempelTimer: null,
       botVoteTimer: null,
+      opening: null,
+      openingTimer: null,
       version: 0,
     };
 
@@ -542,6 +607,7 @@ export function createRoomManager(options = {}) {
     if (!started.ok) return started;
 
     room.session = session;
+    if (started.opening) beginOpening(room, started.opening);
     const events = [...session.currentGame.log];
     syncTimers(room);
     emitUpdate(room);
@@ -559,6 +625,7 @@ export function createRoomManager(options = {}) {
     if (!room.slots[seat].connected) return fail('You are disconnected');
     if (!room.session) return fail('Game has not started');
     if (room.session.status !== SESSION_STATUS.PLAYING) return fail('Round is not in progress');
+    if (room.opening) return fail('Opening discards are still being revealed');
 
     const result = performAction(room, seat, { type: 'play', cards });
     if (!result.ok) return result;
@@ -574,6 +641,7 @@ export function createRoomManager(options = {}) {
     if (!room.slots[seat].connected) return fail('You are disconnected');
     if (!room.session) return fail('Game has not started');
     if (room.session.status !== SESSION_STATUS.PLAYING) return fail('Round is not in progress');
+    if (room.opening) return fail('Opening discards are still being revealed');
 
     const result = performAction(room, seat, { type: 'pass' });
     if (!result.ok) return result;
@@ -589,6 +657,7 @@ export function createRoomManager(options = {}) {
     if (!room.slots[seat].connected) return fail('You are disconnected');
     if (!room.session) return fail('Game has not started');
     if (room.session.status !== SESSION_STATUS.PLAYING) return fail('Round is not in progress');
+    if (room.opening) return fail('Opening discards are still being revealed');
 
     const game = room.session.currentGame;
     const logStart = game.log.length;
@@ -641,6 +710,7 @@ export function createRoomManager(options = {}) {
     const started = startNextRound(room.session);
     if (!started.ok) return started;
 
+    if (started.opening) beginOpening(room, started.opening);
     const events = [...room.session.currentGame.log];
     syncTimers(room);
     emitUpdate(room);

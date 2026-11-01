@@ -26,6 +26,7 @@ function makeManager(options = {}) {
     turnTimeoutMs: 60_000,
     disconnectGraceMs: 10_000,
     botDelayMs: 10_000,
+    openingDurationMs: 0,
     ...options,
   });
 }
@@ -183,6 +184,61 @@ test('host starts a four-seat game and state hides opponents hands', (t) => {
   assert.notEqual(
     hostState.you.hand.map(cardKey).join(','),
     guestState.you.hand.map(cardKey).join(','),
+  );
+});
+
+test('round 1 reveals the opening 3s before the first turn', async (t) => {
+  const manager = makeManager({ openingDurationMs: 40 });
+  t.after(() => manager.close());
+
+  const { code, players } = createRoomWithHumans(manager);
+  const started = manager.startGame({ code, playerId: players[0].playerId });
+
+  assert.equal(started.ok, true);
+  assert.ok(started.state.opening);
+
+  const room = manager.getRoom(code);
+  assert.equal(room.opening.discards.length, 4);
+  assert.equal(room.opening.leader, room.session.currentGame.turn);
+  assert.ok(room.opening.endsAt > room.opening.startedAt);
+  assert.equal(started.state.opening.leader, room.opening.leader);
+  assert.equal(started.state.turnDeadline, null);
+
+  const leaderPlayer = players.find((player) => player.seat === room.opening.leader);
+  const hand = sortHand(room.session.currentGame.players[room.opening.leader].hand);
+
+  assert.equal(
+    manager.play({
+      code,
+      playerId: leaderPlayer.playerId,
+      cards: [cardKey(hand[0])],
+    }).error,
+    'Opening discards are still being revealed',
+  );
+  assert.equal(
+    manager.pass({ code, playerId: leaderPlayer.playerId }).error,
+    'Opening discards are still being revealed',
+  );
+
+  await delay(120);
+
+  assert.equal(room.opening, null);
+  assert.ok(room.turnDeadline > Date.now());
+  assert.ok(
+    room.session.currentGame.log.some((entry) => entry.type === 'opening-complete'),
+  );
+
+  const seat = room.session.currentGame.turn;
+  const turnPlayer = players.find((player) => player.seat === seat);
+  const turnHand = sortHand(room.session.currentGame.players[seat].hand);
+
+  assert.equal(
+    manager.play({
+      code,
+      playerId: turnPlayer.playerId,
+      cards: [cardKey(turnHand[0])],
+    }).ok,
+    true,
   );
 });
 
@@ -390,8 +446,7 @@ test('emits effect-ready game events', (t) => {
   assert.ok(Array.isArray(playEvent.cards));
 });
 
-test('tempelan pauses the turn timer and resolves when all voters accept', (t) => {
-  const manager = makeManager();
+test('tempelan pauses the turn timer and resolves when all voters accept', (t) => {  const manager = makeManager();
   t.after(() => manager.close());
 
   const { code, players } = createRoomWithHumans(manager);

@@ -43,7 +43,9 @@ function describe(entry, players) {
     case 'game-start':
       return 'Game started';
     case 'opening-threes':
-      return `All 3s discarded · ${players[entry.leader]?.name ?? '3♠ holder'} leads`;
+      return 'Opening · everyone reveals their 3s';
+    case 'opening-complete':
+      return entry.message ?? 'All 3s discarded';
     default:
       return entry.message ?? entry.type;
   }
