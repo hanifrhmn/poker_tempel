@@ -19,6 +19,12 @@ npm run dev
 - Server: http://localhost:3000
 - Health check: http://localhost:3000/api/health
 
+## Tests
+
+```bash
+npm test
+```
+
 ## Production build (LAN game night)
 
 ```bash

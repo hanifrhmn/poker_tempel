@@ -96,7 +96,7 @@ Each phase ships a working commit pushed to `main`. Progress is tracked in `curr
 
 - Tempel button appears when the played single is J/Q/K/A (per PRD)
 - Attach one lower-rank card; both are played together
-- Other 3 players get a Yes/No vote; all yes → accepted, any no → cards return to hand
+- Other 3 players get a Yes/No vote; all yes → accepted, any no → only the lower cards return to hand, the higher cards remain played, and the next player turn.
 - Vote timer + timeout behavior (default: reject on timeout)
 - UI states for pending/success/failed tempelan
 

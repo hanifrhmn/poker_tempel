@@ -1,3 +1,7 @@
+export * from './cards.js';
+export * from './combinations.js';
+export * from './game.js';
+
 export const GAME_NAME = 'Poker Tempel';
 export const MAX_PLAYERS = 4;
 export const HAND_SIZE = 13;
