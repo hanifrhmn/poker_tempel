@@ -141,10 +141,10 @@ Built in `client/src/`:
 - `hooks/useRoom.js` — socket lifecycle, identity persistence, auto-rejoin on reload/reconnect, action wrapper with error toasts
 - `HomeScreen` — name entry, create room, join by 5-char code, invite-link prefill via `?room=CODE`
 - `LobbyScreen` — four seat cards with host/bot/online badges, add/remove bots (host), invite link with clipboard fallback for plain-HTTP LAN, start button gated on a full table
-- `GameScreen` — hand dock with click selection, Deselect/Pass/Play, live combination validation, opponent panels, active play, turn timer, action log, responsive table layout
+- `GameScreen` — hand dock with click selection, Deselect/Pass/Play, live combination validation, opponent panels, active play, turn timer, responsive table layout
 - `RoundEndOverlay` — placement list with round points and totals, host "Next round"/"End session"
 - `GameEndOverlay` — final standings by score, back to home
-- Shared components: `CardFace`, `PlayerPanel`, `ActionLog`, `TurnTimer`, `RoomHeader`, `ConnectionBanner`, `ErrorToast`, `CopyLinkButton`, `Button`
+- Shared components: `CardFace`, `PlayerPanel`, `TurnTimer`, `RoomHeader`, `ConnectionBanner`, `ErrorToast`, `CopyLinkButton`, `Button`
 
 Client behavior:
 - Own hand rendered from `room.you.hand`; opponents only expose counts/status (server privacy preserved)
@@ -291,7 +291,8 @@ Final PRD audit:
 ### Verification
 
 - `npm test` → 98/98 passing (54 shared + 35 server + 9 client)
-- Build → 313.13 kB JS / 95.70 kB gzip, 46.48 kB CSS / 8.21 kB gzip
+- Build → 311.11 kB JS / 95.15 kB gzip, 45.79 kB CSS / 8.12 kB gzip
+- Action log removed from the client UI and from the public `room:state` payload, so players cannot review past actions to infer bombs. The engine keeps its internal log for tests, and live `game:event` payloads still drive the effects.
 - Tests cover the final-2 rule, Tempelan final checks, bomb battle chain + loser, bomb-battle reset, self-bomb reset, room-manager reset triggers, bot filtering/chains, and client effect classification.
 
 ## Rule revisions

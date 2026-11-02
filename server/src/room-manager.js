@@ -21,7 +21,6 @@ import { chooseBotMove, chooseBotVote } from './bot.js';
 const ROOM_CODE_LENGTH = 5;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_NAME_LENGTH = 24;
-const MAX_LOG_ENTRIES = 50;
 const SEAT_COUNT = 4;
 
 function fail(error) {
@@ -529,7 +528,6 @@ export function createRoomManager(options = {}) {
       tempelDeadline: room.tempelDeadline,
       placements: [...game.placements],
       players,
-      log: game.log.slice(-MAX_LOG_ENTRIES),
       lastRoundResult: session.lastRoundResult,
       you:
         viewerSeat === -1

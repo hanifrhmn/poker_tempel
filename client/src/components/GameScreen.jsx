@@ -8,7 +8,6 @@ import {
   isLegalFinalPlay,
   isLegalFinalPlaySet,
 } from '@poker-tempel/shared';
-import ActionLog from './ActionLog.jsx';
 import Button from './Button.jsx';
 import CardFace from './CardFace.jsx';
 import GameEffects from './GameEffects.jsx';
@@ -280,8 +279,6 @@ export default function GameScreen({ room, send, onLeave }) {
                 <p className="text-sm text-emerald-200/40">No cards on the table</p>
               )}
             </div>
-
-            <ActionLog log={room.log} players={players} />
           </div>
         </section>
 
